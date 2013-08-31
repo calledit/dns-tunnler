@@ -93,8 +93,8 @@ var onMessage = function (request, response) {
 					    if(BeVerbose)
 							console.error("	this is a new session to service "+ServiceID+" establishing new connection to service server");
 						
-                        //we can send about 100 bytes of pure data per request
-		  				ConnectionPool[cPoolId] = {'Data2ClientPerQuestion':100,'TotalSentToClient':0, 'TotalRecivedFromClient':0, 'data':[], 'datalen':[], 'socket': null, 'updata':[],'ServiceID':ServiceID,'DowndataID':0};
+                        //we can send about 95 bytes of pure data per request
+		  				ConnectionPool[cPoolId] = {'Data2ClientPerQuestion':95,'TotalSentToClient':0, 'TotalRecivedFromClient':0, 'data':[], 'datalen':[], 'socket': null, 'updata':[],'ServiceID':ServiceID,'DowndataID':0};
 		  				ConnectionPool[cPoolId].socket = net.connect(Services[ServiceID].port, Services[ServiceID].host,
 		                    function(){
 		                        console.error(cPoolId+ ' Connected to Service server with ServiceID: '+ConnectionPool[cPoolId].ServiceID);
@@ -211,7 +211,6 @@ var onMessage = function (request, response) {
 		  					if(typeof(ConnectionPool[cPoolId].data[0]) != 'string'){
 		  						ConnectionPool[cPoolId].data[0] = ConnectionPool[cPoolId].data[0].toString('base64')
                                 //console.error('_',ConnectionPool[cPoolId].data[0],'_')
-							    TotalBytes += ConnectionPool[cPoolId].data[0].length;
 		  						ConnectionPool[cPoolId].datalen[0] = ConnectionPool[cPoolId].data[0].length
 		  					}
   						
@@ -251,6 +250,7 @@ var onMessage = function (request, response) {
 		  						for(DPA in DatArrs){
 		  							//console.error('Answer',DatArrs[DPA]);
 		  							RemaningBytes -= DatArrs[DPA].length+NameToUse.length+12;//A answer costs some static bytes
+							        TotalBytes += DatArrs[DPA].length/4; // devided by for cause of b64
 		  							response.answer.push(dns.TXT({
 		  								name: NameToUse,
 		    							data: DatArrs[DPA],
