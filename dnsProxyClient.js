@@ -72,16 +72,31 @@ process.stdin.resume();
 //When we get data from the ssh Client
 process.stdin.on('data', function (chunk) {
 	SubmitBuffer(chunk);
+    CurrentTime = (new Date()).getTime();
+    if(CurrentTime-LastRequest > options.timing){
+        CurrentActivity = 0;
+        clearTimeout(CurrentTimeOut);
+        HandleRequestTiming();
+    }
 });
 
 process.stdin.on('end', function () {
   process.exit();
 });
 
+var CurrentTimeOut = setTimeout(HandleRequestTiming,1);
+var CurrentActivity = 0;
+var LastRequest = 0;
 
-setInterval(HandleQue, options.timing);
+function HandleRequestTiming(){
+    HandleQue();
+    LastRequest = (new Date()).getTime();
+    CurrentTimeOut = setTimeout(HandleRequestTiming, options.timing+CurrentActivity);
+    CurrentActivity += 10;
+}
 
-HandleQue();
+HandleRequestTiming();
+
 function AddToQue(req1, req2){
     RequestQue.push([req1, req2])
 }
@@ -218,7 +233,8 @@ function doDnsRequest(QustData,SecQuestData){
 					var DataInSoFar = DownData[Parts[1]].join('');
 					//If we are expecting more data
 					if(Parts[3] != DataInSoFar.length){
-						HandleQue();
+                        CurrentActivity();
+						//HandleQue();
 					}else{
 						//process.stderr.write(DownData[Parts[1]], 'base64');
 						FinishedDownData[Parts[1]] = Parts[1];
