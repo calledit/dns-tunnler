@@ -1,4 +1,4 @@
-dns-proxy
+dns-tunnler
 =========
 
 A dns proxy/tunnel for ssh over dns
@@ -8,7 +8,7 @@ Install
 -------
 
 ```bash
-git clone git@github.com:callesg/dns-proxy.git
+git clone git@github.com:callesg/dns-tunnler.git
 npm install native-dns stdio
 ```
 
