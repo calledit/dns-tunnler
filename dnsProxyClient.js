@@ -9,7 +9,10 @@ var options = stdio.getopt({
     'service': {key: 's', args: 1, description: 'The service that we want to connect to.', mandatory: true},
     'resolver': {key: 'r',args:1, description: 'The ip number of the resolver server we want to use, default is 127.0.0.1'},
     'port': {key: 'p', args: 1, description: 'The resolver server port the default is 53'},
-    'timing': {key: 't', args: 1, description: 'How often to do dns requests in ms. 500 is default'},
+    'timing': {key: 't', args: 1, description: 'How often to normaly do dns requests in ms. 500 is default'},
+    'mintiming': {key: 'ti', args: 1, description: 'Never send request faster than this(to lessen strain on resolvers) in ms. 50 is default'},
+    'maxtiming': {key: 'ta', args: 1, description: 'Never send request slower than this (to slow is not good) in ms. 150000 is default'},
+    'throttle': {key: 'tr', args: 1, description: 'How much to incresse the latency per request when there is no activity in ms. 100 is default'},
     'UseDualQuestion': {key: 'q', description: 'Use two questions per request. Some dns servers dont allow that. however if it is supported one can double the up bandwith'},
     'verbose': {key: 'v', description: 'Print more information to stderr'}
 });
@@ -17,12 +20,30 @@ var options = stdio.getopt({
 if(!options.resolver){
     options.resolver = '127.0.0.1';
 }
+if(!options.mintiming){
+    options.mintiming = 15;
+}
+options.mintiming = parseInt(options.mintiming);
+
+if(!options.maxtiming){
+    options.maxtiming = 150000;
+}
+options.maxtiming = parseInt(options.maxtiming);
+
+if(!options.throttle){
+    options.throttle = 100;
+}
+options.throttle = parseInt(options.throttle);
+
 if(!options.timing){
     options.timing = 500;
 }
+options.timing = parseInt(options.timing);
+
 if(!options.port){
     options.port = 53;
 }
+options.port = parseInt(options.port);
 
 var ResolveServer = options.resolver;
 var ResolveServerPort = options.port;
@@ -72,12 +93,7 @@ process.stdin.resume();
 //When we get data from the ssh Client
 process.stdin.on('data', function (chunk) {
 	SubmitBuffer(chunk);
-    CurrentTime = (new Date()).getTime();
-    if(CurrentTime-LastRequest > options.timing){
-        CurrentActivity = 0;
-        clearTimeout(CurrentTimeOut);
-        HandleRequestTiming();
-    }
+	HandleRequestTiming(true);
 });
 
 process.stdin.on('end', function () {
@@ -88,11 +104,21 @@ var CurrentTimeOut = setTimeout(HandleRequestTiming,1);
 var CurrentActivity = 0;
 var LastRequest = 0;
 
-function HandleRequestTiming(){
-    HandleQue();
-    LastRequest = (new Date()).getTime();
-    CurrentTimeOut = setTimeout(HandleRequestTiming, options.timing+CurrentActivity);
-    CurrentActivity += 10;
+function HandleRequestTiming(Activity){
+	if(Activity){
+		CurrentTime = (new Date()).getTime();
+		CurrentActivity = 0;
+		if(CurrentTime-LastRequest > options.mintiming){
+			HandleQue();
+			LastRequest = (new Date()).getTime();
+		}
+		clearTimeout(CurrentTimeOut);
+	}else{
+		HandleQue();
+		LastRequest = (new Date()).getTime();
+		CurrentActivity = Math.min(CurrentActivity + options.throttle, options.maxtiming);
+	}
+	CurrentTimeOut = setTimeout(HandleRequestTiming, options.timing+CurrentActivity);
 }
 
 HandleRequestTiming();
@@ -233,8 +259,7 @@ function doDnsRequest(QustData,SecQuestData){
 					var DataInSoFar = DownData[Parts[1]].join('');
 					//If we are expecting more data
 					if(Parts[3] != DataInSoFar.length){
-                        CurrentActivity();
-						//HandleQue();
+						HandleRequestTiming(true);
 					}else{
 						//process.stderr.write(DownData[Parts[1]], 'base64');
 						FinishedDownData[Parts[1]] = Parts[1];
