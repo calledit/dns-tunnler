@@ -20,7 +20,7 @@ var options = stdio.getopt({
 
 if(!options.resolver){
     options.resolver = '127.0.0.1';
-    var Lines = fs.readFileSync('/etc/resolv.conf',{encoding:'utf-8'}).split("\n");
+    var Lines = fs.readFileSync('/etc/resolv.conf',{encoding:'utf8'}).split("\n");
     for(nr in Lines){
         var opts = Lines[nr].split(' ');
         if(opts[0] == 'nameserver'){
