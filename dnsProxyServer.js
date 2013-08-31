@@ -93,7 +93,8 @@ var onMessage = function (request, response) {
 					    if(BeVerbose)
 							console.error("	this is a new session to service "+ServiceID+" establishing new connection to service server");
 						
-		  				ConnectionPool[cPoolId] = {'TotalSentToClient':0, 'TotalRecivedFromClient':0, 'data':[], 'datalen':[], 'socket': null, 'updata':[],'ServiceID':ServiceID,'DowndataID':0};
+                        //we can send about 100 bytes of pure data per request
+		  				ConnectionPool[cPoolId] = {'Data2ClientPerQuestion':100,'TotalSentToClient':0, 'TotalRecivedFromClient':0, 'data':[], 'datalen':[], 'socket': null, 'updata':[],'ServiceID':ServiceID,'DowndataID':0};
 		  				ConnectionPool[cPoolId].socket = net.connect(Services[ServiceID].port, Services[ServiceID].host,
 		                    function(){
 		                        console.error(cPoolId+ ' Connected to Service server with ServiceID: '+ConnectionPool[cPoolId].ServiceID);
@@ -103,6 +104,11 @@ var onMessage = function (request, response) {
 		                	console.error(cPoolId+' Got packet with '+d.length+' bytes from Service server with ServiceID: '+ConnectionPool[cPoolId].ServiceID);
 		                	ConnectionPool[cPoolId].datalen.push(d.length);
 		                	ConnectionPool[cPoolId].data.push(d);
+                            var InLocalBuffer = 0;
+                            for(var i in ConnectionPool[cPoolId].datalen) { InLocalBuffer += ConnectionPool[cPoolId].datalen[i]; }
+                            if(ConnectionPool[cPoolId].Data2ClientPerQuestion < InLocalBuffer){
+                                ConnectionPool[cPoolId].socket.pause();
+                            }
 		                });
                 	
 		                ConnectionPool[cPoolId].socket.on('error', function(err) {
@@ -232,6 +238,11 @@ var onMessage = function (request, response) {
 		  						}else{
 		  							DatArrs.push(MetaToClient+ConnectionPool[cPoolId].data.shift());
                                     ConnectionPool[cPoolId].datalen.shift();
+                                    var InLocalBuffer = 0;
+                                    for(var i in ConnectionPool[cPoolId].datalen) { InLocalBuffer += ConnectionPool[cPoolId].datalen[i]; }
+                                    if(ConnectionPool[cPoolId].Data2ClientPerQuestion > InLocalBuffer){
+                                        ConnectionPool[cPoolId].socket.resume();
+                                    }
 		  							ConnectionPool[cPoolId].DowndataID++;
 		  						}
   					
