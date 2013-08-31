@@ -1,5 +1,6 @@
 
 var dns = require('native-dns'),
+  fs = require('fs'),
   stdio = require('stdio');
 
 var Nibbler = require('./Nibbler.js').Nibbler;
@@ -7,7 +8,7 @@ var Nibbler = require('./Nibbler.js').Nibbler;
 var options = stdio.getopt({
     'dnsname': {key: 'd', args: 1, description: 'The dns name of the dns server example: dns.example.com', mandatory: true},
     'service': {key: 's', args: 1, description: 'The service that we want to connect to.', mandatory: true},
-    'resolver': {key: 'r',args:1, description: 'The ip number of the resolver server we want to use, default is 127.0.0.1'},
+    'resolver': {key: 'r',args:1, description: 'The ip number of the resolver server we want to use, default is read from /etc/resolv.conf'},
     'port': {key: 'p', args: 1, description: 'The resolver server port the default is 53'},
     'timing': {key: 't', args: 1, description: 'How often to normaly do dns requests in ms. 500 is default'},
     'mintiming': {key: 'ti', args: 1, description: 'Never send request faster than this(to lessen strain on resolvers) in ms. 50 is default'},
@@ -19,7 +20,15 @@ var options = stdio.getopt({
 
 if(!options.resolver){
     options.resolver = '127.0.0.1';
+    var Lines = fs.readFileSync('/etc/resolv.conf',{encoding:'utf-8'}).split("\n");
+    for(nr in Lines){
+        var opts = Lines[nr].split(' ');
+        if(opts[0] == 'nameserver'){
+            options.resolver = opts[1];
+        }
+    }
 }
+
 if(!options.mintiming){
     options.mintiming = 15;
 }
