@@ -101,9 +101,9 @@ function SubmitBuffer(SendBuffer){
 	var DataB = base32.encode(SendBuffer);
 	var DataTosend = DataB.length;
 	/*
-    A DNS name can be at max 253 (some places say 255 but i think they count with the start and stop bytes) bytes long and
-    each subdomain maximumly 63 bytes which means that we need to insert 4 dots thats where 249 comes from
-    */
+    	A DNS name can be at max 253 (some places say 255 but i think they count with the start and stop bytes) bytes long and
+    	each subdomain maximumly 63 bytes which means that we need to insert 4 dots thats where 249 comes from
+    	*/
 	var MaxDataBytesInTxt = 249;
 	
 	while(DataB.length != 0){
@@ -131,7 +131,7 @@ function SubmitBuffer(SendBuffer){
 		//If We should use the secound query
 		if(options.UseDualQuestion && DataB.length != 0){
 			encodedLength = Numbase32.encode([DataB.length, DataTosend]);
-		    PacketData = Numbase32.encode([UpdataID,ConnectionIDNum, SubmitedTotData]);
+		    	PacketData = Numbase32.encode([UpdataID,ConnectionIDNum, SubmitedTotData]);
 			QustDataOrg = encodedLength+'.'+PacketData+AppendStr;
 			Bytes2Use = Math.min(DataB.length, Math.abs(Math.floor(MaxDataBytesInTxt-QustDataOrg.length)));
 			
@@ -186,71 +186,68 @@ function doDnsRequest(QustData,SecQuestData){
 	}
 	
 	req.on('timeout', function () {
-	  console.error('Timeout in making request');
-	  console.error("ERROR", QustData, SecQuestData);
+		console.error('Timeout in making request');
+		console.error("ERROR", QustData, SecQuestData);
 	});
 	
 	req.on('message', function (err, answer) {//err should be null
-		if(err != null)
+		if(err != null){
 			console.error("Got an error:",err);
-	  
-	  answer.answer.forEach(function (a) {
-		//console.error("Got Answer:",a.name);
-		if(a.type == 16){
-			
-			var Splitpos = a.data.indexOf(':');
-			if(Splitpos == -1)
-				console.error("could not find split pos ERROR");
-			var Parts = a.data.substr(0,Splitpos);
-			a.data = a.data.substr(Splitpos+1);
-			Parts = Parts.split(".");
-			
-			if(typeof(Parts[2]) != 'undefined' && ConnectionIDNum == Parts[2]){
-				if(typeof(DownData[Parts[1]]) == 'undefined'){
-					DownData[Parts[1]] = []
+		}
+		answer.answer.forEach(function (a) {
+			//console.error("Got Answer:",a.name);
+			if(a.type == 16){
+				
+				var Splitpos = a.data.indexOf(':');
+				if(Splitpos == -1){
+					console.error("could not find split pos ERROR");
 				}
-                if(typeof(DownData[Parts[1]][Parts[3]-Parts[0]]) != 'undefined'){
-				    console.error("ERROR got back duplicates of a packet part");
-                }
-                DownData[Parts[1]][Parts[3]-Parts[0]] = a.data;
-			    
-                var DataInSoFar = DownData[Parts[1]].join('');
-                //If we are expecting more data
-				if(Parts[3] != DataInSoFar.length){
-                    HandleQue();
-					//doDnsRequest();
+				var Parts = a.data.substr(0,Splitpos);
+				a.data = a.data.substr(Splitpos+1);
+				Parts = Parts.split(".");
+				
+				if(typeof(Parts[2]) != 'undefined' && ConnectionIDNum == Parts[2]){
+					if(typeof(DownData[Parts[1]]) == 'undefined'){
+						DownData[Parts[1]] = []
+					}
+                			if(typeof(DownData[Parts[1]][Parts[3]-Parts[0]]) != 'undefined'){
+						console.error("ERROR got back duplicates of a packet part");
+					}
+					DownData[Parts[1]][Parts[3]-Parts[0]] = a.data;
+					
+					var DataInSoFar = DownData[Parts[1]].join('');
+					//If we are expecting more data
+					if(Parts[3] != DataInSoFar.length){
+						HandleQue();
+					}else{
+						//process.stderr.write(DownData[Parts[1]], 'base64');
+						FinishedDownData[Parts[1]] = Parts[1];
+						for(key in FinishedDownData){
+							var dwid = FinishedDownData[key];
+							if(dwid == NextDownDataID){
+								//console.error("ERROR There is Down data ealier than",Parts[1],"in the que:",key,DownData[key] );
+								process.stdout.write(DownData[dwid].join(''), 'base64');
+								delete DownData[dwid];
+								delete FinishedDownData[key];
+								NextDownDataID += 1;
+							}
+						}
+					}
 				}else{
-					//process.stderr.write(DownData[Parts[1]], 'base64');
-                    FinishedDownData[Parts[1]] = Parts[1];
-					for(key in FinishedDownData){
-                        var dwid = FinishedDownData[key];
-                        if(dwid == NextDownDataID){
-				            //console.error("ERROR There is Down data ealier than",Parts[1],"in the que:",key,DownData[key] );
-					        process.stdout.write(DownData[dwid].join(''), 'base64');
-					        delete DownData[dwid];
-					        delete FinishedDownData[key];
-                            NextDownDataID += 1;
-                        }
-                    }
+					console.error("ERROR got back the following answer:", a.name);
 				}
 			}else{
-				console.error("ERROR got back the following answer:", a.name);
+				console.error("Could not contact proxy server got back the following answer:",a.name);
 			}
-		}else{
-			console.error("Could not contact proxy server got back the following answer:",a.name);
-		}
-	  });
+		});
 	});
 	
-	
 	req.on('end', function () {
-	
-	 //console.error("End1");
+		//console.error("End1");
 	});
 	
 	req.send();
 	RequestCounter++;
-
 }
 
 
