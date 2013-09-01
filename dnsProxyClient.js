@@ -141,6 +141,7 @@ HandleRequestTiming();
 
 function AddToQue(req1, req2){
     RequestQue.push([req1, req2])
+	RequestCounter++;
 }
 
 function HandleQue(){
@@ -169,7 +170,7 @@ function CreateRequestsFromClientData(SendBuffer){
 	SubmitedTotData += SubmitedBytes;
 
     function CreateQuestionFromSendBuffer(){
-        var PacketData = Numbase32.encode([ConnectionIDNum, LastRecivedID, DNSPacketID]);
+        var PacketData = Numbase32.encode([ConnectionIDNum, LastRecivedID, DNSPacketID, RequestCounter]);
         var QustDataOrg = PacketData+AppendStr;
         
         var UsableChars = Math.abs(Math.floor(MaxDataBytesInTxt-QustDataOrg.length));
@@ -195,6 +196,7 @@ function doDnsRequest(QustData,SecQuestData){
 
 	if(typeof(QustData) == 'undefined'){
 		var PacketData = Numbase32.encode([ConnectionIDNum,LastRecivedID,DNSPacketID,RequestCounter]);
+	    RequestCounter++;
 		QustData = PacketData+AppendStr;
 	}
 	
@@ -281,7 +283,6 @@ function doDnsRequest(QustData,SecQuestData){
 	});
 	
 	req.send();
-	RequestCounter++;
 }
 
 

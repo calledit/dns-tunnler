@@ -55,12 +55,17 @@ var UseTcp = false;
 if(UseTcp){
 	tcpserver = dns.createTCPServer();
 }
+function PrintInfo(VerbTxT){
+    if(BeVerbose){
+        var now = new Date();
+        console.error(now.getHours()+':'+now.getMinutes()+':'+now.getSeconds()+' '+VerbTxT);
+    }
+}
 
 var onMessage = function (request, response) {
   var i;
   
-  if(BeVerbose)
- 	 console.error("# Got query from: "+request._socket._remote.address+" with: "+request.question.length+" question(s)")
+  PrintInfo("# Got query from: "+request._socket._remote.address+" with: "+request.question.length+" question(s)")
   //Do this once per dns question
   for(x in request.question){
     
@@ -82,44 +87,47 @@ var onMessage = function (request, response) {
   			
 	  			//which Socket we wan't 
 	  			var PacketData = Numbase32.decode(SubDomains[SubDomains.length-2]);
-	            if(PacketData.length < 2){
-	                console.error('	Data recived from client is corrupt. atleast cPoolId and LastRecivedID needs to be set in a request');
+	            if(PacketData.length < 3){
+	                PrintInfo('	Data recived from client is corrupt. atleast cPoolId, LastRecivedID, DnsUpId and requestcounter needs to be set in a request');
 	            }else{
 	  			    var cPoolId = PacketData[0];
 	  			    var LastRecivedID = PacketData[1];
+	  			    var RequestCounter = PacketData[3];
 		  			var answercounter = 0;
-					console.error('	question regarding session: '+cPoolId);
+					PrintInfo('	question regarding session: '+cPoolId);
   				
 		  			//If The ConnectionPoolID was unknown we create a connection with that id
 		  			if(typeof(ConnectionPool[cPoolId]) == 'undefined'){
-					    if(BeVerbose)
-							console.error("	this is a new session to service "+ServiceID+" establishing new connection to service server");
-						
-                        //we can send about 95 bytes of pure data per request
-		  				ConnectionPool[cPoolId] = {'Data2ClientPerQuestion':95,'TotalSentToClient':0, 'TotalRecivedFromClient':0, 'data':new Buffer(0), 'datalen':[], 'socket': null, 'updata':[],'ServiceID':ServiceID,'DowndataID':0,'LastUpdataID':4};
-		  				ConnectionPool[cPoolId].socket = net.connect(Services[ServiceID].port, Services[ServiceID].host,
-		                    function(){
-		                        console.error(cPoolId+ ' Connected to Service server with ServiceID: '+ConnectionPool[cPoolId].ServiceID);
-		                });
-                	
-		                ConnectionPool[cPoolId].socket.on('data', function(d) {
-		                	console.error(cPoolId+' Got packet with '+d.length+' bytes from Service server with ServiceID: '+ConnectionPool[cPoolId].ServiceID);
-                            ConnectionPool[cPoolId].data = Buffer.concat([ConnectionPool[cPoolId].data,d]);
-		                	//ConnectionPool[cPoolId].datalen.push(d.length);
-		                	//ConnectionPool[cPoolId].data.push(d);
-		                	//
-                            if(ConnectionPool[cPoolId].Data2ClientPerQuestion < ConnectionPool[cPoolId].data.length){
-                                ConnectionPool[cPoolId].socket.pause();
-                            }
-		                });
-                	
-		                ConnectionPool[cPoolId].socket.on('error', function(err) {
-		        			console.error(cPoolId+ " Got Error From Service server Connection", err);
-		    			});
-		    			ConnectionPool[cPoolId].socket.on('close', function() {
-		        			console.error(cPoolId+ ' Service server with ServiceID: '+ConnectionPool[cPoolId].ServiceID+'  disconnected');
-		        		});
-                	
+                        if(RequestCounter == 0){
+                            PrintInfo("	this is a new session to service "+ServiceID+" establishing new connection to service server");
+                            
+                            //we can send about 95 bytes of pure data per request
+                            ConnectionPool[cPoolId] = {'Data2ClientPerQuestion':95,'TotalSentToClient':0, 'TotalRecivedFromClient':0, 'data':new Buffer(0), 'datalen':[], 'socket': null, 'updata':[],'ServiceID':ServiceID,'DowndataID':0,'LastUpdataID':4};
+                            ConnectionPool[cPoolId].socket = net.connect(Services[ServiceID].port, Services[ServiceID].host,
+                                function(){
+                                    PrintInfo(cPoolId+ ' Connected to Service server with ServiceID: '+ConnectionPool[cPoolId].ServiceID);
+                            });
+                        
+                            ConnectionPool[cPoolId].socket.on('data', function(d) {
+                                PrintInfo(cPoolId+' Got packet with '+d.length+' bytes from Service server with ServiceID: '+ConnectionPool[cPoolId].ServiceID);
+                                ConnectionPool[cPoolId].data = Buffer.concat([ConnectionPool[cPoolId].data,d]);
+                                //ConnectionPool[cPoolId].datalen.push(d.length);
+                                //ConnectionPool[cPoolId].data.push(d);
+                                //
+                                if(ConnectionPool[cPoolId].Data2ClientPerQuestion < ConnectionPool[cPoolId].data.length){
+                                    ConnectionPool[cPoolId].socket.pause();
+                                }
+                            });
+                        
+                            ConnectionPool[cPoolId].socket.on('error', function(err) {
+                                PrintInfo(cPoolId+ " Got Error From Service server Connection");
+                            });
+                            ConnectionPool[cPoolId].socket.on('close', function() {
+                                PrintInfo(cPoolId+ ' Service server with ServiceID: '+ConnectionPool[cPoolId].ServiceID+'  disconnected');
+                            });
+                        }else{
+                            PrintInfo("Got a new cPoolId where the request counter was not 0. Probably a replay of dead session");
+                        }
 		  			}else{//The Connection Already exists in the connection pool
   					
 		  				/*
@@ -141,20 +149,20 @@ var onMessage = function (request, response) {
   					
 		  					if(typeof(ConnectionPool[cPoolId].updata[UpdataID]) == 'undefined'){
 		  						ConnectionPool[cPoolId].updata[UpdataID] = new Buffer(base32.decode(Bs32Data));
-		  						console.error('Recived data width upid: ' + UpdataID);
+		  						PrintInfo('Recived data width upid: ' + UpdataID);
                                 if(ConnectionPool[cPoolId].LastUpdataID == UpdataID-1){
 		  					        while(typeof(ConnectionPool[cPoolId].updata[ConnectionPool[cPoolId].LastUpdataID+1]) != 'undefined'){
 		  						        ConnectionPool[cPoolId].socket.write(
                                             ConnectionPool[cPoolId].updata[ConnectionPool[cPoolId].LastUpdataID+1]
                                         );
-		  						        console.error('submited '+(ConnectionPool[cPoolId].updata[ConnectionPool[cPoolId].LastUpdataID+1].length)+' bytes of updata width upid: ' + 
-                                         (ConnectionPool[cPoolId].LastUpdataID+1)
-                                         + '');
+		  						        //PrintInfo('submited '+(ConnectionPool[cPoolId].updata[ConnectionPool[cPoolId].LastUpdataID+1].length)+' bytes of updata width upid: ' + 
+                                        // (ConnectionPool[cPoolId].LastUpdataID+1)
+                                        // + '');
                                         ConnectionPool[cPoolId].LastUpdataID += 1;
 		  					        }
                                 }
 		  					}else{
-		  						console.error('	Got data width upid: ' + UpdataID + ' More than one time');
+		  						PrintInfo('	Got data width upid: ' + UpdataID + ' More than one time');
 		  					}
   							//var RecivedInQuestion = ((Bs32Data.length/8.0)*b32cbits);
 		  					//var DatRecived = 0.0;//DataLeft - Bs32Data.length;
@@ -276,13 +284,13 @@ var onMessage = function (request, response) {
 		  					}
 		  				}
 						if(TotalBytes != 0){
-							console.error("	Sent "+TotalBytes+" bytes to Client");
+							PrintInfo("	Sent "+TotalBytes+" bytes to Client");
 							ConnectionPool[cPoolId].TotalSentToClient += TotalBytes;
 						}
 		  			}
 	            }
 	  		}else{
-  	            console.error("Client ask for a service that we dont support:",request.question[x].name);
+  	            PrintInfo("Client ask for a service that we dont support:",request.question[x].name);
 	  			/*
 	  			response.answer.push(dns.TXT({
 	    			name: "Unknown.service.alias",
@@ -291,7 +299,7 @@ var onMessage = function (request, response) {
 	  			}));*/
 	  		}
 		}else{
-  	        console.error("Question does not apper to be corectly formated:",request.question[x].name);
+  	        PrintInfo("Question does not apper to be corectly formated:",request.question[x].name);
 	  		/*
 	  		response.answer.push(dns.TXT({
 	    		name: "to.few.subdomain.entrys",
@@ -300,7 +308,7 @@ var onMessage = function (request, response) {
 	  		}));*/
 	  	}
   	}else{
-  	    console.error("Question not for us:",request.question[x].name);
+  	    PrintInfo("Question not for us:",request.question[x].name);
   	/*
   		response.answer.push(dns.TXT({
     		name: "Unknown.main.domain",
@@ -315,8 +323,7 @@ var onMessage = function (request, response) {
   //response.question = [ { name: ProxyOwner, type: 16, class: 1 } ];
   //console.error('Submit Response');
   response.send();
-  if(BeVerbose)
- 	 console.error("__________________________________________")
+  PrintInfo("__________________________________________")
 };
 
 var onError = function (err, buff, req, res) {
@@ -333,7 +340,7 @@ var onSocketError = function (err, socket) {
 };
 
 var onClose = function () {
-  console.log('server closed', this.address());
+  PrintInfo('server closed', this.address());
 };
 
 server.on('request', onMessage);
