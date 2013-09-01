@@ -224,8 +224,8 @@ function doDnsRequest(QustData,SecQuestData){
 	}
 	
 	req.on('timeout', function () {
-		console.error('Timeout in making request, Will try to resubmit Request');
-		console.error("ERROR", QustData, SecQuestData);
+		//console.error('Timeout in making request, Will try to resubmit Request');
+		//console.error("ERROR", QustData, SecQuestData);
         req.send();
 	});
 	
