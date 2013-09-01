@@ -241,7 +241,7 @@ var onMessage = function (request, response) {
   						
 		  					//Numbase32.encode([Math.round(Math.random()*100000)]);
 		  					var NameToUse = response.question[x].name;
-		  					var MetaToClient = cPoolId+"."+UseDownID+':';
+		  					var MetaToClient = cPoolId+"."+UseDownID+'.'+ConnectionPool[cPoolId].data.length+':';
   						
 		  					var CharsInAnswer = Math.min(CharsPerAnswer,RemaningChars)-NameToUse.length-12-MetaToClient.length;//There is 12 static bytes in a txt record
   						

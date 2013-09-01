@@ -121,23 +121,26 @@ var CurrentActivity = 0;
 var LastRequest = 0;
 
 function HandleRequestTiming(Activity){
+    var RunNextTime = options.timing;
 	if(Activity){
 		CurrentTime = (new Date()).getTime();
 		CurrentActivity = 0;
-		if(CurrentTime-LastRequest > options.mintiming){
+		clearTimeout(CurrentTimeOut);
+		if(CurrentTime-LastRequest >= options.mintiming){
 			HandleQue();
 			LastRequest = (new Date()).getTime();
-		}
-		clearTimeout(CurrentTimeOut);
+		}else{
+            RunNextTime = options.mintiming - (CurrentTime-LastRequest);
+        }
 	}else{
 		HandleQue();
 		LastRequest = (new Date()).getTime();
 		CurrentActivity = Math.min(CurrentActivity + options.throttle, options.maxtiming);
+        RunNextTime = options.timing+CurrentActivity;
 	}
-	CurrentTimeOut = setTimeout(HandleRequestTiming, options.timing+CurrentActivity);
+	CurrentTimeOut = setTimeout(HandleRequestTiming, RunNextTime);
 }
 
-HandleRequestTiming();
 
 function AddToQue(req1, req2){
     RequestQue.push([req1, req2])
@@ -246,28 +249,31 @@ function doDnsRequest(QustData,SecQuestData){
 				a.data = a.data.substr(Splitpos+1);
 				Parts = Parts.split(".");
 				
-				if(typeof(Parts[1]) != 'undefined' && ConnectionIDNum == Parts[0]){
+				if(Parts.length > 2 && ConnectionIDNum == Parts[0]){
 					if(typeof(DownData[Parts[1]]) == 'undefined'){
 						DownData[Parts[1]] = a.data
+                        if(a.data.length < Parts[2]){
+                            HandleRequestTiming(true);
+                        }
 					}else{
 						console.error("ERROR got back duplicates of a request with DownDataID:",Parts[1],a);
                     }
 					
 					//If we are expecting more data
 					if(true){
-						//process.stderr.write(DownData[Parts[1]], 'base64');
-						FinishedDownData[Parts[1]] = Parts[1];
-						for(key in FinishedDownData){
-							var dwid = FinishedDownData[key];
-							if(dwid == NextDownDataID){
-								//console.error("ERROR There is Down data ealier than",Parts[1],"in the que:",key,DownData[key] );
-								process.stdout.write(DownData[dwid], 'base64');
-								delete DownData[dwid];
-								delete FinishedDownData[key];
-								NextDownDataID += 1;
-							}
-						}
 					}
+                    //process.stderr.write(DownData[Parts[1]], 'base64');
+                    FinishedDownData[Parts[1]] = Parts[1];
+                    for(key in FinishedDownData){
+                        var dwid = FinishedDownData[key];
+                        if(dwid == NextDownDataID){
+                            //console.error("ERROR There is Down data ealier than",Parts[1],"in the que:",key,DownData[key] );
+                            process.stdout.write(DownData[dwid], 'base64');
+                            delete DownData[dwid];
+                            delete FinishedDownData[key];
+                            NextDownDataID += 1;
+                        }
+                    }
 				}else{
 					console.error("ERROR got back the following answer:", a.name);
 				}
