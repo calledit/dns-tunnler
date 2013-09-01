@@ -20,9 +20,10 @@ if(!options.port){
 }
 
 
+var b32cbits = 5;
 var base32 = new Nibbler({
     dataBits: 8,
-    codeBits: 5,
+    codeBits: b32cbits,
     keyString: 'ABCDEFGHIJKLMNOPQRSTUVWXYZ123456789',
     pad: '',
     arrayData: true
@@ -35,7 +36,7 @@ var BeVerbose = options.verbose;
 
 var Numbase32 = new Nibbler({
     dataBits: 20,
-    codeBits: 5,
+    codeBits: b32cbits,
     keyString: 'ABCDEFGHIJKLMNOPQRSTUVWXYZ123456789',
     pad: '',
     arrayData: true
@@ -81,10 +82,11 @@ var onMessage = function (request, response) {
   			
 	  			//which Socket we wan't 
 	  			var PacketData = Numbase32.decode(SubDomains[SubDomains.length-2]);
-	            if(PacketData.length != 3){
-	                console.error('	Data recived from client is corrupt.');
+	            if(PacketData.length < 2){
+	                console.error('	Data recived from client is corrupt. atleast cPoolId and LastRecivedID needs to be set in a request');
 	            }else{
-	  			    var cPoolId = PacketData[1];
+	  			    var cPoolId = PacketData[0];
+	  			    var LastRecivedID = PacketData[1];
 		  			var answercounter = 0;
 					console.error('	question regarding session: '+cPoolId);
   				
@@ -94,7 +96,7 @@ var onMessage = function (request, response) {
 							console.error("	this is a new session to service "+ServiceID+" establishing new connection to service server");
 						
                         //we can send about 95 bytes of pure data per request
-		  				ConnectionPool[cPoolId] = {'Data2ClientPerQuestion':95,'TotalSentToClient':0, 'TotalRecivedFromClient':0, 'data':[], 'datalen':[], 'socket': null, 'updata':[],'ServiceID':ServiceID,'DowndataID':0};
+		  				ConnectionPool[cPoolId] = {'Data2ClientPerQuestion':95,'TotalSentToClient':0, 'TotalRecivedFromClient':0, 'data':[], 'datalen':[], 'socket': null, 'updata':[],'ServiceID':ServiceID,'DowndataID':0,'LastUpdataID':4};
 		  				ConnectionPool[cPoolId].socket = net.connect(Services[ServiceID].port, Services[ServiceID].host,
 		                    function(){
 		                        console.error(cPoolId+ ' Connected to Service server with ServiceID: '+ConnectionPool[cPoolId].ServiceID);
@@ -125,40 +127,43 @@ var onMessage = function (request, response) {
 		  				Handle upData from The client
 		  				############################################################
 		  				*/
-		  				if(SubDomains.length > 2){//When there is updata there is more than 2 extra subdomains
-  						
-  						
+		  				if(SubDomains.length > 2 && typeof(PacketData[2]) != 'undefined'){//When there is updata there is more than 2 extra subdomains
+  						    
 		  					//A subdomain can only be 63 bytes long so the data is splited in to several subdomains
 		  					var Bs32Data = '';
-		  					for(var i = 0;i<SubDomains.length-3;i++){
+		  					for(var i = 0;i<SubDomains.length-2;i++){
 		  						Bs32Data += SubDomains[i];
 		  					}
-  					
-		  					var MetaData = Numbase32.decode(SubDomains[SubDomains.length-3]);
-		  					var DataLeft = MetaData[0];
-		  					var TotalLength = MetaData[1];
                     
 		                    //var PacketData = Numbase32.decode(SubDomains[SubDomains.length-3]);
-		                    var UpdataID = PacketData[0];
+		                    var UpdataID = PacketData[2];
   					
-		  					//We buffer the recived data until we have the entire tcp packet
 		  					if(typeof(ConnectionPool[cPoolId].updata[UpdataID]) == 'undefined'){
-		  						ConnectionPool[cPoolId].updata[UpdataID] = [];
-		  					}
-		  					if(typeof(ConnectionPool[cPoolId].updata[UpdataID][TotalLength-DataLeft]) == 'undefined'){
-		  						ConnectionPool[cPoolId].updata[UpdataID][TotalLength-DataLeft] = Bs32Data;
+		  						ConnectionPool[cPoolId].updata[UpdataID] = new Buffer(base32.decode(Bs32Data));
+		  						console.error('Recived data width upid: ' + UpdataID);
+                                if(ConnectionPool[cPoolId].LastUpdataID == UpdataID-1){
+		  					        while(typeof(ConnectionPool[cPoolId].updata[ConnectionPool[cPoolId].LastUpdataID+1]) != 'undefined'){
+		  						        ConnectionPool[cPoolId].socket.write(
+                                            ConnectionPool[cPoolId].updata[ConnectionPool[cPoolId].LastUpdataID+1]
+                                        );
+		  						        console.error('submited '+(ConnectionPool[cPoolId].updata[ConnectionPool[cPoolId].LastUpdataID+1].length)+' bytes of updata width upid: ' + 
+                                         (ConnectionPool[cPoolId].LastUpdataID+1)
+                                         + '');
+                                        ConnectionPool[cPoolId].LastUpdataID += 1;
+		  					        }
+                                }
 		  					}else{
-		  						console.error('	Got data at offset: '+ (TotalLength-DataLeft)+' More than one time');
+		  						console.error('	Got data width upid: ' + UpdataID + ' More than one time');
 		  					}
-  							var RecivedInQuestion = ((Bs32Data.length/8.0)*5.0);
-		  					var DatRecived = 0.0;//DataLeft - Bs32Data.length;
-							var BytesRecvied = 0.0;
+  							//var RecivedInQuestion = ((Bs32Data.length/8.0)*b32cbits);
+		  					//var DatRecived = 0.0;//DataLeft - Bs32Data.length;
+							//var BytesRecvied = 0.0;
 		  					//When We recive the last part send it away
-		  					for(DatOffset in ConnectionPool[cPoolId].updata[UpdataID]){
-		  						DatRecived += ConnectionPool[cPoolId].updata[UpdataID][DatOffset].length;
-		  					}
-							var BytesDatRecived = (DatRecived/8.0)*5.0;
-		  					if(DatRecived == TotalLength){
+		  					//for(DatOffset in ConnectionPool[cPoolId].updata[UpdataID]){
+		  					//	DatRecived += ConnectionPool[cPoolId].updata[UpdataID][DatOffset].length;
+		  					//}
+							//var BytesDatRecived = (DatRecived/8.0)*5.0;
+		  					if(false){
   							
 		  						var UpData = new Buffer(base32.decode(ConnectionPool[cPoolId].updata[UpdataID].join('')));
 								BytesRecvied = UpData.length;
@@ -170,7 +175,7 @@ var onMessage = function (request, response) {
 		  						console.error('	Recived '+RecivedInQuestion+' bytes Proxyed full packet with '+BytesRecvied+' bytes to server');
 		  						ConnectionPool[cPoolId].socket.write(UpData);
 		  					}else{
-		  						console.error('	Recived '+RecivedInQuestion+' bytes the client will send another '+((DataLeft/8.0)*5.0)+' bytes and we have recived '+BytesDatRecived+" The client has sent: "+(TotalLength-DataLeft)+"  of "+ TotalLength +" bytes in the packet");
+		  					//	console.error('	Recived '+RecivedInQuestion+' bytes the client will send another '+((DataLeft/8.0)*5.0)+' bytes and we have recived '+BytesDatRecived+" The client has sent: "+(TotalLength-DataLeft)+"  of "+ TotalLength +" bytes in the packet");
 		  					}
   					
 		  					/*else{

@@ -60,12 +60,19 @@ var ServiceAlias = options.service;
 var ProxyOwner = options.dnsname;
 
 
+/*
+A DNS name can be at max 253 (some places say 255 but i think they count with the start and stop bytes) bytes long and
+each subdomain maximumly 63 bytes which means that we need to insert 4 dots thats where 249 comes from
+*/
+var MaxDataBytesInTxt = 249;
 var RequestCounter = 0;
-var UpdataID = 0;
+var LastRecivedID = 0;
+var DNSPacketID = 5;
 
+var b32cbits = 5;
 var base32 = new Nibbler({
     dataBits: 8,
-    codeBits: 5,
+    codeBits: b32cbits,
     keyString: 'ABCDEFGHIJKLMNOPQRSTUVWXYZ123456789',
     pad: '',
     arrayData: true
@@ -73,7 +80,7 @@ var base32 = new Nibbler({
 
 var Numbase32 = new Nibbler({
     dataBits: 20,
-    codeBits: 5,
+    codeBits: b32cbits,
     keyString: 'ABCDEFGHIJKLMNOPQRSTUVWXYZ123456789',
     pad: '',
     arrayData: true
@@ -101,7 +108,7 @@ process.stdin.resume();
 
 //When we get data from the ssh Client
 process.stdin.on('data', function (chunk) {
-	SubmitBuffer(chunk);
+	CreateRequestsFromClientData(chunk);
 	HandleRequestTiming(true);
 });
 
@@ -145,73 +152,50 @@ function HandleQue(){
     }
 }
 
-function SubmitBuffer(SendBuffer){
+function CreateRequestsFromClientData(SendBuffer){
 	
-	//Convert The Buffer to Base32 text
-	var DataB = base32.encode(SendBuffer);
-	var DataTosend = DataB.length;
-	/*
-    	A DNS name can be at max 253 (some places say 255 but i think they count with the start and stop bytes) bytes long and
-    	each subdomain maximumly 63 bytes which means that we need to insert 4 dots thats where 249 comes from
-    	*/
-	var MaxDataBytesInTxt = 249;
-	
-	while(DataB.length != 0){
-		var encodedLength = Numbase32.encode([DataB.length, DataTosend]);
-		var PacketData = Numbase32.encode([UpdataID, ConnectionIDNum, SubmitedTotData]);
-		var QustDataOrg = encodedLength+'.'+PacketData+AppendStr;
+	var SubmitedBytes = 0;
+	while(SendBuffer.length != SubmitedBytes){
 		
-		var Bytes2Use = Math.min(DataB.length, Math.abs(Math.floor(MaxDataBytesInTxt-QustDataOrg.length)));
-		
-		var ActualData = DataB.substr(0, Bytes2Use);
-		DataB = DataB.substr(Bytes2Use);
-		
-		
-		var FormatedData = '';
-		while(ActualData.length > 63){
-			FormatedData += ActualData.substr(0,63) + ".";
-			ActualData = ActualData.substr(63)
-		}
-		FormatedData += ActualData + ".";
-		var QustData = FormatedData + QustDataOrg;
-		
-		
+        var QustData = CreateQuestionFromSendBuffer();
 		var QsDat2;
 
 		//If We should use the secound query
-		if(options.UseDualQuestion && DataB.length != 0){
-			encodedLength = Numbase32.encode([DataB.length, DataTosend]);
-		    	PacketData = Numbase32.encode([UpdataID,ConnectionIDNum, SubmitedTotData]);
-			QustDataOrg = encodedLength+'.'+PacketData+AppendStr;
-			Bytes2Use = Math.min(DataB.length, Math.abs(Math.floor(MaxDataBytesInTxt-QustDataOrg.length)));
-			
-			ActualData = DataB.substr(0, Bytes2Use);
-			DataB = DataB.substr(Bytes2Use);
-			
-			FormatedData = '';
-			while(ActualData.length > 63){
-				FormatedData += ActualData.substr(0,63) + ".";
-				ActualData = ActualData.substr(63)
-			}
-			FormatedData += ActualData + ".";
-			QsDat2 = FormatedData + QustDataOrg;
+		if(options.UseDualQuestion && SendBuffer.length != SubmitedBytes){
+            QsDat2 = CreateQuestionFromSendBuffer();
 		}
 		AddToQue(QustData,QsDat2);
-		
 	}
-	SubmitedTotData += DataTosend;
-	UpdataID++;
+	SubmitedTotData += SubmitedBytes;
+
+    function CreateQuestionFromSendBuffer(){
+        var PacketData = Numbase32.encode([ConnectionIDNum, LastRecivedID, DNSPacketID]);
+        var QustDataOrg = PacketData+AppendStr;
+        
+        var UsableChars = Math.abs(Math.floor(MaxDataBytesInTxt-QustDataOrg.length));
+        var Bytes2Use = Math.min(SendBuffer.length-SubmitedBytes, Math.floor(UsableChars*(b32cbits/8)));
+
+        var ActualData = base32.encode(SendBuffer.slice(SubmitedBytes, SubmitedBytes + Bytes2Use));
+        SubmitedBytes += Bytes2Use;
+        
+        var FormatedData = '';
+        while(ActualData.length > 63){
+            FormatedData += ActualData.substr(0,63) + ".";
+            ActualData = ActualData.substr(63)
+        }
+        FormatedData += ActualData + ".";
+        DNSPacketID++;
+        return(FormatedData + QustDataOrg);
+    }
 }
 
 function doDnsRequest(QustData,SecQuestData){
 	
 	if(typeof(QustData) == 'undefined'){
-		var PacketData = Numbase32.encode([RequestCounter, ConnectionIDNum, SubmitedTotData]);
-		QustData = PacketData+'.'+ServiceAlias+'.'+ProxyOwner;
+		var PacketData = Numbase32.encode([ConnectionIDNum,LastRecivedID]);
+		QustData = PacketData+AppendStr;
 	}
 	
-	
-	//console.error("OK", QustData, SecQuestData);
 	
 	var question = dns.Question({
 	  name: QustData,
@@ -236,8 +220,9 @@ function doDnsRequest(QustData,SecQuestData){
 	}
 	
 	req.on('timeout', function () {
-		console.error('Timeout in making request');
+		console.error('Timeout in making request, Will try to resubmit Request');
 		console.error("ERROR", QustData, SecQuestData);
+        req.send();
 	});
 	
 	req.on('message', function (err, answer) {//err should be null
@@ -291,6 +276,7 @@ function doDnsRequest(QustData,SecQuestData){
 			}
 		});
 	});
+    
 	
 	req.on('end', function () {
 		//console.error("End1");
