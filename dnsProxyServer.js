@@ -96,7 +96,7 @@ var onMessage = function (request, response) {
 							console.error("	this is a new session to service "+ServiceID+" establishing new connection to service server");
 						
                         //we can send about 95 bytes of pure data per request
-		  				ConnectionPool[cPoolId] = {'Data2ClientPerQuestion':95,'TotalSentToClient':0, 'TotalRecivedFromClient':0, 'data':[], 'datalen':[], 'socket': null, 'updata':[],'ServiceID':ServiceID,'DowndataID':0,'LastUpdataID':4};
+		  				ConnectionPool[cPoolId] = {'Data2ClientPerQuestion':95,'TotalSentToClient':0, 'TotalRecivedFromClient':0, 'data':new Buffer(0), 'datalen':[], 'socket': null, 'updata':[],'ServiceID':ServiceID,'DowndataID':0,'LastUpdataID':4};
 		  				ConnectionPool[cPoolId].socket = net.connect(Services[ServiceID].port, Services[ServiceID].host,
 		                    function(){
 		                        console.error(cPoolId+ ' Connected to Service server with ServiceID: '+ConnectionPool[cPoolId].ServiceID);
@@ -104,11 +104,11 @@ var onMessage = function (request, response) {
                 	
 		                ConnectionPool[cPoolId].socket.on('data', function(d) {
 		                	console.error(cPoolId+' Got packet with '+d.length+' bytes from Service server with ServiceID: '+ConnectionPool[cPoolId].ServiceID);
-		                	ConnectionPool[cPoolId].datalen.push(d.length);
-		                	ConnectionPool[cPoolId].data.push(d);
-                            var InLocalBuffer = 0;
-                            for(var i in ConnectionPool[cPoolId].datalen) { InLocalBuffer += ConnectionPool[cPoolId].datalen[i]; }
-                            if(ConnectionPool[cPoolId].Data2ClientPerQuestion < InLocalBuffer){
+                            ConnectionPool[cPoolId].data = Buffer.concat([ConnectionPool[cPoolId].data,d]);
+		                	//ConnectionPool[cPoolId].datalen.push(d.length);
+		                	//ConnectionPool[cPoolId].data.push(d);
+		                	//
+                            if(ConnectionPool[cPoolId].Data2ClientPerQuestion < ConnectionPool[cPoolId].data.length){
                                 ConnectionPool[cPoolId].socket.pause();
                             }
 		                });
@@ -163,6 +163,7 @@ var onMessage = function (request, response) {
 		  					//	DatRecived += ConnectionPool[cPoolId].updata[UpdataID][DatOffset].length;
 		  					//}
 							//var BytesDatRecived = (DatRecived/8.0)*5.0;
+							/*
 		  					if(false){
   							
 		  						var UpData = new Buffer(base32.decode(ConnectionPool[cPoolId].updata[UpdataID].join('')));
@@ -176,7 +177,7 @@ var onMessage = function (request, response) {
 		  						ConnectionPool[cPoolId].socket.write(UpData);
 		  					}else{
 		  					//	console.error('	Recived '+RecivedInQuestion+' bytes the client will send another '+((DataLeft/8.0)*5.0)+' bytes and we have recived '+BytesDatRecived+" The client has sent: "+(TotalLength-DataLeft)+"  of "+ TotalLength +" bytes in the packet");
-		  					}
+		  					}*/
   					
 		  					/*else{
 		  						console.error(cPoolId, "The client has sent its last pice of data but we have not gotten the full tcp packet. We must have missed a dns request or gotten it in wrong order");
@@ -195,67 +196,73 @@ var onMessage = function (request, response) {
 		  				*/
   				
 		  				//A UDP dns answerpacket may not exced 512 bytes
-		  				var RemaningBytes = 500;  //512-12 The static part of a dns response is 12 bytes
+		  				var RemaningChars = 500;  //512-12 The static part of a dns response is 12 bytes
 		  				for(qt in response.question){
   						
 		  					//console.error("Names", response.question[qt].name);
   						
-		  					RemaningBytes -= response.question[qt].name.length + 6;
+		  					RemaningChars -= response.question[qt].name.length + 6;
 		  				}
   					
 		  				//console.error("RemaningBytes", RemaningBytes);
 		  				var TotalBytes = 0;
   					
   					
-		  				var BytesPerAnswer = 255;//An answer can only hold 255 bytes
+		  				var CharsPerAnswer = 255;//An answer can only hold 255 Chars
 		  				//While we have Data in the buffers and the dns answer is not to long
-		  				while(ConnectionPool[cPoolId].data.length != 0 && RemaningBytes > 0){
+		  				while(ConnectionPool[cPoolId].data.length != 0 && RemaningChars > 0){
   						
   						
 		  					//We wait with converting the data to base64 until now to save memory
-		  					if(typeof(ConnectionPool[cPoolId].data[0]) != 'string'){
+		  					/*if(typeof(ConnectionPool[cPoolId].data[0]) != 'string'){
 		  						ConnectionPool[cPoolId].data[0] = ConnectionPool[cPoolId].data[0].toString('base64')
                                 //console.error('_',ConnectionPool[cPoolId].data[0],'_')
 		  						ConnectionPool[cPoolId].datalen[0] = ConnectionPool[cPoolId].data[0].length
-		  					}
+		  					}*/
   						
   						
 		  					//Save stuff to put in the answer so that we have it if the current buffer is removed below
-		  					var RemLength = ConnectionPool[cPoolId].data[0].length;
+		  					//var RemLength = ConnectionPool[cPoolId].data[0].length;
 		  					var UseDownID = ConnectionPool[cPoolId].DowndataID;
-                            var PacketLen = ConnectionPool[cPoolId].datalen[0];
+                            //var PacketLen = ConnectionPool[cPoolId].datalen[0];
   						
 		  					var DatArrs = [];
   						
   						
 		  					//Numbase32.encode([Math.round(Math.random()*100000)]);
 		  					var NameToUse = response.question[x].name;
-		  					var MetaToClient = RemLength+"."+UseDownID+"."+cPoolId+'.'+PacketLen+':';
+		  					var MetaToClient = cPoolId+"."+UseDownID+':';
   						
-		  					var BytesInAnswer = Math.min(BytesPerAnswer,RemaningBytes)-NameToUse.length-12-MetaToClient.length;//There is 12 static bytes in a txt record
+		  					var CharsInAnswer = Math.min(CharsPerAnswer,RemaningChars)-NameToUse.length-12-MetaToClient.length;//There is 12 static bytes in a txt record
   						
-		  					if( 0 < BytesInAnswer){
-		  						//If we have more than one answer can send split the data
-		  						if(ConnectionPool[cPoolId].data[0].length > BytesInAnswer){
+		  					if( 0 < CharsInAnswer){
+                                var MaxBytesinAnswer =  Math.floor(CharsInAnswer *(6/8));
+                                var BytesinAnswer =  Math.min(MaxBytesinAnswer, ConnectionPool[cPoolId].data.length);
+                                TotalBytes += BytesinAnswer;
+
+		  						DatArrs.push(MetaToClient + ConnectionPool[cPoolId].data.slice(0,BytesinAnswer).toString('base64'));
+		  						ConnectionPool[cPoolId].data = ConnectionPool[cPoolId].data.slice(BytesinAnswer);
+		  						ConnectionPool[cPoolId].DowndataID++;
+                                if(ConnectionPool[cPoolId].Data2ClientPerQuestion > ConnectionPool[cPoolId].data.length){
+                                    ConnectionPool[cPoolId].socket.resume();
+                                }
+
+		  						/*if(ConnectionPool[cPoolId].data.length > BytesInAnswer){
 		  							DatArrs.push(MetaToClient+ConnectionPool[cPoolId].data[0].substr(0,BytesInAnswer));
 		  							ConnectionPool[cPoolId].data[0] = ConnectionPool[cPoolId].data[0].substr(BytesInAnswer);
 		  						}else{
 		  							DatArrs.push(MetaToClient+ConnectionPool[cPoolId].data.shift());
-                                    ConnectionPool[cPoolId].datalen.shift();
-                                    var InLocalBuffer = 0;
-                                    for(var i in ConnectionPool[cPoolId].datalen) { InLocalBuffer += ConnectionPool[cPoolId].datalen[i]; }
-                                    if(ConnectionPool[cPoolId].Data2ClientPerQuestion > InLocalBuffer){
+                                    if(ConnectionPool[cPoolId].Data2ClientPerQuestion > ConnectionPool[cPoolId].data.length){
                                         ConnectionPool[cPoolId].socket.resume();
                                     }
-		  							ConnectionPool[cPoolId].DowndataID++;
-		  						}
+		  						}*/
   					
   					
 		  						//The loop is unnececary
 		  						for(DPA in DatArrs){
 		  							//console.error('Answer',DatArrs[DPA]);
-		  							RemaningBytes -= DatArrs[DPA].length+NameToUse.length+12;//A answer costs some static bytes
-							        TotalBytes += DatArrs[DPA].length/4; // devided by for cause of b64
+		  							RemaningChars -= DatArrs[DPA].length+NameToUse.length+12;//A answer costs some static bytes
+							        //TotalBytes += DatArrs[DPA].length/4; // devided by for cause of b64
 		  							response.answer.push(dns.TXT({
 		  								name: NameToUse,
 		    							data: DatArrs[DPA],

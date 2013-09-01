@@ -241,27 +241,22 @@ function doDnsRequest(QustData,SecQuestData){
 				a.data = a.data.substr(Splitpos+1);
 				Parts = Parts.split(".");
 				
-				if(typeof(Parts[2]) != 'undefined' && ConnectionIDNum == Parts[2]){
+				if(typeof(Parts[1]) != 'undefined' && ConnectionIDNum == Parts[0]){
 					if(typeof(DownData[Parts[1]]) == 'undefined'){
-						DownData[Parts[1]] = []
-					}
-                			if(typeof(DownData[Parts[1]][Parts[3]-Parts[0]]) != 'undefined'){
-						console.error("ERROR got back duplicates of a packet part");
-					}
-					DownData[Parts[1]][Parts[3]-Parts[0]] = a.data;
-					
-					var DataInSoFar = DownData[Parts[1]].join('');
-					//If we are expecting more data
-					if(Parts[3] != DataInSoFar.length){
-						HandleRequestTiming(true);
+						DownData[Parts[1]] = a.data
 					}else{
+						console.error("ERROR got back duplicates of a packet part");
+                    }
+					
+					//If we are expecting more data
+					if(true){
 						//process.stderr.write(DownData[Parts[1]], 'base64');
 						FinishedDownData[Parts[1]] = Parts[1];
 						for(key in FinishedDownData){
 							var dwid = FinishedDownData[key];
 							if(dwid == NextDownDataID){
 								//console.error("ERROR There is Down data ealier than",Parts[1],"in the que:",key,DownData[key] );
-								process.stdout.write(DownData[dwid].join(''), 'base64');
+								process.stdout.write(DownData[dwid], 'base64');
 								delete DownData[dwid];
 								delete FinishedDownData[key];
 								NextDownDataID += 1;
