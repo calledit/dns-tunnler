@@ -102,7 +102,7 @@ var onMessage = function (request, response) {
                             PrintInfo("	this is a new session to service "+ServiceID+" establishing new connection to service server");
                             
                             //we can send about 95 bytes of pure data per request
-                            ConnectionPool[cPoolId] = {'Data2ClientPerQuestion':95,'TotalSentToClient':0, 'TotalRecivedFromClient':0, 'data':new Buffer(0), 'datalen':[], 'socket': null, 'updata':[],'ServiceID':ServiceID,'DowndataID':0,'LastUpdataID':4};
+                            ConnectionPool[cPoolId] = {'Data2ClientPerQuestion':95,'TotalSentToClient':0, 'TotalRecivedFromClient':0, 'data':new Buffer(0), 'socket': null, 'updata':[],'ServiceID':ServiceID,'DowndataID':0,'LastUpdataID':4};
                             ConnectionPool[cPoolId].socket = net.connect(Services[ServiceID].port, Services[ServiceID].host,
                                 function(){
                                     PrintInfo(cPoolId+ ' Connected to Service server with ServiceID: '+ConnectionPool[cPoolId].ServiceID);
@@ -155,6 +155,7 @@ var onMessage = function (request, response) {
 		  						        ConnectionPool[cPoolId].socket.write(
                                             ConnectionPool[cPoolId].updata[ConnectionPool[cPoolId].LastUpdataID+1]
                                         );
+                                        delete ConnectionPool[cPoolId].updata[ConnectionPool[cPoolId].LastUpdataID+1];
 		  						        //PrintInfo('submited '+(ConnectionPool[cPoolId].updata[ConnectionPool[cPoolId].LastUpdataID+1].length)+' bytes of updata width upid: ' + 
                                         // (ConnectionPool[cPoolId].LastUpdataID+1)
                                         // + '');
