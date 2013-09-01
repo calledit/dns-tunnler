@@ -191,8 +191,10 @@ function CreateRequestsFromClientData(SendBuffer){
 
 function doDnsRequest(QustData,SecQuestData){
 	
+    
+
 	if(typeof(QustData) == 'undefined'){
-		var PacketData = Numbase32.encode([ConnectionIDNum,LastRecivedID]);
+		var PacketData = Numbase32.encode([ConnectionIDNum,LastRecivedID,DNSPacketID,RequestCounter]);
 		QustData = PacketData+AppendStr;
 	}
 	
@@ -229,8 +231,9 @@ function doDnsRequest(QustData,SecQuestData){
 		if(err != null){
 			console.error("Got an error:",err);
 		}
+		
+    
 		answer.answer.forEach(function (a) {
-			//console.error("Got Answer:",a.name);
 			if(a.type == 16){
 				
 				var Splitpos = a.data.indexOf(':');
@@ -245,7 +248,7 @@ function doDnsRequest(QustData,SecQuestData){
 					if(typeof(DownData[Parts[1]]) == 'undefined'){
 						DownData[Parts[1]] = a.data
 					}else{
-						console.error("ERROR got back duplicates of a packet part");
+						console.error("ERROR got back duplicates of a request with DownDataID:",Parts[1],a);
                     }
 					
 					//If we are expecting more data

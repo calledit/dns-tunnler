@@ -127,6 +127,7 @@ var onMessage = function (request, response) {
 		  				Handle upData from The client
 		  				############################################################
 		  				*/
+                        //console.error(SubDomains)
 		  				if(SubDomains.length > 2 && typeof(PacketData[2]) != 'undefined'){//When there is updata there is more than 2 extra subdomains
   						    
 		  					//A subdomain can only be 63 bytes long so the data is splited in to several subdomains
