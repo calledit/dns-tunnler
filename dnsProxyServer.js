@@ -88,7 +88,7 @@ var onMessage = function (request, response) {
 		
 		
 		
-  		HandleQuestionToUs(DataDomains,response.question[x],request.question[x],RemaningChars);
+  		RemaningChars = HandleQuestionToUs(DataDomains,response.question[x],request.question[x],response.answer,RemaningChars);
   		
   	}else{
   	    PrintInfo("Question not for us:",request.question[x].name);
@@ -146,7 +146,7 @@ if(UseTcp){
 
 function CreateNewSession(cPoolId, ServiceID){
     //we can send about 95 bytes of pure data per Question
-    ConnectionPool[cPoolId] = {'Data2ClientPerQuestion':95,'TotalSentToClient':0, 'TotalRecivedFromClient':0, 'data':new Buffer(0), 'socket': null, 'updata':[],'ServiceID':ServiceID,'DowndataID':0,'LastUpdataID':4};
+    ConnectionPool[cPoolId] = {'Data2ClientPerQuestion':95,'TotalSentToClient':0, 'TotalRecivedFromClient':0, 'data':new Buffer(0), 'socket': null, 'updata':[],'ServiceID':ServiceID,'DowndataID':0,'LastUpdataID':4,'PrevAnswers':[]};
     ConnectionPool[cPoolId].socket = net.connect(Services[ServiceID].port, Services[ServiceID].host,
         function(){
             PrintInfo(cPoolId+ ' Connected to Service server with ServiceID: '+ConnectionPool[cPoolId].ServiceID);
@@ -198,7 +198,7 @@ function HandleClientData(cPoolId,DataDomains,PacketData){
 	}
 }
 
-function HandleServerData(cPoolId, responseQuestion,RemaningChars){
+function HandleServerData(cPoolId, responseQuestion,Answers,RemaningChars){
 
 	var TotalBytes = 0;
 
@@ -234,8 +234,10 @@ function HandleServerData(cPoolId, responseQuestion,RemaningChars){
 			//The loop is unnececary
 			for(DPA in DatArrs){
 				//console.error('Answer',DatArrs[DPA]);
+				console.error(NameToUse+":");
+				console.error(DatArrs[DPA]);
 				RemaningChars -= DatArrs[DPA].length+13;//A answer costs some static bytes
-				response.answer.push(dns.TXT({
+				Answers.push(dns.TXT({
 					name: NameToUse,
 					data: DatArrs[DPA],
 					ttl: 1
@@ -246,13 +248,13 @@ function HandleServerData(cPoolId, responseQuestion,RemaningChars){
 		}
 	}
 	if(TotalBytes != 0){
-		PrintInfo("	Sent "+TotalBytes+" bytes to Client");
+		PrintInfo("	Sent "+TotalBytes+" bytes to Client, "+ConnectionPool[cPoolId].data.length+" bytes left in buffer");
 		ConnectionPool[cPoolId].TotalSentToClient += TotalBytes;
 	}
 	return(RemaningChars);
 }
 
-function HandleQuestionToUs(DataDomains,responseQuestion,requestQuestion,RemaningChars){
+function HandleQuestionToUs(DataDomains,responseQuestion,requestQuestion,Answers,RemaningChars){
 	//is the question intended for one of the services we support
   	if(DataDomains.length > 1){
 		var ServiceID = DataDomains[DataDomains.length-1];
@@ -280,25 +282,31 @@ function HandleQuestionToUs(DataDomains,responseQuestion,requestQuestion,Remanin
                     }
 	  			}else{
 					//The Connection Already exists in the connection pool
-				
-	  				/*
-	  				############################################################
-	  				Handle upData from The client
-	  				############################################################
-	  				*/
-	  				if(DataDomains.length > 2 && typeof(PacketData[2]) != 'undefined'){
-						//When there is updata there is more than 2 extra subdomains
-						HandleClientData(cPoolId,DataDomains,PacketData);
-	  				}
-			
-	  				/*
-	  				############################################################
-	  				Submit Data to The client
-	  				############################################################
-	  				*/
-			
-	  				RemaningChars = HandleServerData(cPoolId, responseQuestion, RemaningChars);
-					
+
+                    if(typeof(ConnectionPool[cPoolId].PrevAnswers[RequestCounter]) != 'undefined'){
+				        for(ansid in ConnectionPool[cPoolId].PrevAnswers[RequestCounter]){
+                            Answers.push(ConnectionPool[cPoolId].PrevAnswers[RequestCounter][ansid]);
+                        }
+                    }else{
+                        /*
+                        ############################################################
+                        Handle upData from The client
+                        ############################################################
+                        */
+                        if(DataDomains.length > 2 && typeof(PacketData[2]) != 'undefined'){
+                            //When there is updata there is more than 2 extra subdomains
+                            HandleClientData(cPoolId,DataDomains,PacketData);
+                        }
+                
+                        /*
+                        ############################################################
+                        Submit Data to The client
+                        ############################################################
+                        */
+                
+                        RemaningChars = HandleServerData(cPoolId, responseQuestion,Answers, RemaningChars);
+                        ConnectionPool[cPoolId].PrevAnswers[RequestCounter] = Answers;
+					}
 	  			}
             }
   		}else{
