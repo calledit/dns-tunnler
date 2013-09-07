@@ -66,6 +66,12 @@ var onMessage = function (request, response) {
   var i;
   
   PrintInfo("# Got query from: "+request._socket._remote.address+" with: "+request.question.length+" question(s)")
+  
+  //A UDP dns answerpacket may not exced 512 bytes
+  var RemaningChars = 500;  //512-12 The static part of a dns response is 12 bytes
+  for(qt in response.question){
+		RemaningChars -= response.question[qt].name.length + 8;
+  }
   //Do this once per dns question
   for(x in request.question){
     
@@ -79,7 +85,10 @@ var onMessage = function (request, response) {
   		
   		//Split the question in to its subdomains
   		var DataDomains = QuestionName.substr(0,IsToUs).split('.');
-  		HandleQuestionToUs(DataDomains,response);
+		
+		
+		
+  		HandleQuestionToUs(DataDomains,response.question[x],request.question[x],RemaningChars);
   		
   	}else{
   	    PrintInfo("Question not for us:",request.question[x].name);
@@ -189,16 +198,8 @@ function HandleClientData(cPoolId,DataDomains,PacketData){
 	}
 }
 
-function HandleServerData(cPoolId, response){
-	var SmalestQuestion = 0;
-	//A UDP dns answerpacket may not exced 512 bytes
-	var RemaningChars = 500;  //512-12 The static part of a dns response is 12 bytes
-	for(qt in response.question){
-		SmalestQuestion = qt;
-		RemaningChars -= response.question[qt].name.length + 8;
-	}
+function HandleServerData(cPoolId, responseQuestion,RemaningChars){
 
-	//console.error("RemaningBytes", RemaningBytes);
 	var TotalBytes = 0;
 
 
@@ -212,7 +213,7 @@ function HandleServerData(cPoolId, response){
 	
 	
 		//Numbase32.encode([Math.round(Math.random()*100000)]);
-		var NameToUse = response.question[SmalestQuestion].name;
+		var NameToUse = responseQuestion.name;
 		var MetaToClient = cPoolId+"."+UseDownID+'.'+ConnectionPool[cPoolId].data.length+':';
 	
 		var CharsInAnswer = Math.min(CharsPerAnswer,RemaningChars)-(13+MetaToClient.length);//There is 13 static bytes in a txt record
@@ -248,9 +249,10 @@ function HandleServerData(cPoolId, response){
 		PrintInfo("	Sent "+TotalBytes+" bytes to Client");
 		ConnectionPool[cPoolId].TotalSentToClient += TotalBytes;
 	}
+	return(RemaningChars);
 }
 
-function HandleQuestionToUs(DataDomains,response){
+function HandleQuestionToUs(DataDomains,responseQuestion,requestQuestion,RemaningChars){
 	//is the question intended for one of the services we support
   	if(DataDomains.length > 1){
 		var ServiceID = DataDomains[DataDomains.length-1];
@@ -295,12 +297,12 @@ function HandleQuestionToUs(DataDomains,response){
 	  				############################################################
 	  				*/
 			
-	  				HandleServerData(cPoolId, response);
+	  				RemaningChars = HandleServerData(cPoolId, responseQuestion, RemaningChars);
 					
 	  			}
             }
   		}else{
-            PrintInfo("Client ask for a service that we dont support:",request.question[x].name);
+            PrintInfo("Client ask for a service that we dont support:",requestQuestion.name);
   			/*
   			response.answer.push(dns.TXT({
     			name: "Unknown.service.alias",
@@ -309,7 +311,7 @@ function HandleQuestionToUs(DataDomains,response){
   			}));*/
   		}
 	}else{
-        PrintInfo("Question does not apper to be corectly formated:",request.question[x].name);
+        PrintInfo("Question does not apper to be corectly formated:",requestQuestion.name);
   		/*
   		response.answer.push(dns.TXT({
     		name: "to.few.subdomain.entrys",
@@ -317,5 +319,5 @@ function HandleQuestionToUs(DataDomains,response){
     		ttl: 1,
   		}));*/
   	}
-	
+	return(RemaningChars);
 }
