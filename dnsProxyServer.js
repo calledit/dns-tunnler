@@ -145,8 +145,8 @@ if(UseTcp){
 }
 
 function CreateNewSession(cPoolId, ServiceID){
-    //we can send about 95 bytes of pure data per Question
-    ConnectionPool[cPoolId] = {'Data2ClientPerQuestion':95,'TotalSentToClient':0, 'TotalRecivedFromClient':0, 'data':new Buffer(0), 'socket': null, 'updata':[],'ServiceID':ServiceID,'DowndataID':0,'LastUpdataID':4,'PrevAnswers':[]};
+    //we can send about 300 bytes of pure data per Question
+    ConnectionPool[cPoolId] = {'Data2ClientPerQuestion':300,'TotalSentToClient':0, 'TotalRecivedFromClient':0, 'data':new Buffer(0), 'socket': null, 'updata':[],'ServiceID':ServiceID,'DowndataID':0,'LastUpdataID':4,'PrevAnswers':[]};
     ConnectionPool[cPoolId].socket = net.connect(Services[ServiceID].port, Services[ServiceID].host,
         function(){
             PrintInfo(cPoolId+ ' Connected to Service server with ServiceID: '+ConnectionPool[cPoolId].ServiceID);
