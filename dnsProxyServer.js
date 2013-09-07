@@ -234,8 +234,6 @@ function HandleServerData(cPoolId, responseQuestion,Answers,RemaningChars){
 			//The loop is unnececary
 			for(DPA in DatArrs){
 				//console.error('Answer',DatArrs[DPA]);
-				console.error(NameToUse+":");
-				console.error(DatArrs[DPA]);
 				RemaningChars -= DatArrs[DPA].length+13;//A answer costs some static bytes
 				Answers.push(dns.TXT({
 					name: NameToUse,
@@ -282,10 +280,15 @@ function HandleQuestionToUs(DataDomains,responseQuestion,requestQuestion,Answers
                     }
 	  			}else{
 					//The Connection Already exists in the connection pool
+				    for(reqid in ConnectionPool[cPoolId].PrevAnswers){
+                        if(ConnectionPool[cPoolId].PrevAnswers[reqid].LastDownDataID <= LastRecivedID){
+                            delete ConnectionPool[cPoolId].PrevAnswers[reqid];
+                        }
+                    }
 
                     if(typeof(ConnectionPool[cPoolId].PrevAnswers[RequestCounter]) != 'undefined'){
-				        for(ansid in ConnectionPool[cPoolId].PrevAnswers[RequestCounter]){
-                            Answers.push(ConnectionPool[cPoolId].PrevAnswers[RequestCounter][ansid]);
+				        for(ansid in ConnectionPool[cPoolId].PrevAnswers[RequestCounter].Ans){
+                            Answers.push(ConnectionPool[cPoolId].PrevAnswers[RequestCounter].Ans[ansid]);
                         }
                     }else{
                         /*
@@ -305,7 +308,7 @@ function HandleQuestionToUs(DataDomains,responseQuestion,requestQuestion,Answers
                         */
                 
                         RemaningChars = HandleServerData(cPoolId, responseQuestion,Answers, RemaningChars);
-                        ConnectionPool[cPoolId].PrevAnswers[RequestCounter] = Answers;
+                        ConnectionPool[cPoolId].PrevAnswers[RequestCounter] = {'LastDownDataID':ConnectionPool[cPoolId].DowndataID,'Ans': Answers};
 					}
 	  			}
             }
