@@ -74,240 +74,13 @@ var onMessage = function (request, response) {
     var QuestionName = request.question[x].name;
   	var IsToUs = QuestionName.lastIndexOf(ProxyOwner);
 
-    //Does the question end with our Special Domain?
+    //Does the question end with our Special Domain
   	if(IsToUs != -1 && IsToUs == (QuestionName.length - ProxyOwner.length)){
   		
   		//Split the question in to its subdomains
-  		var SubDomains = QuestionName.substr(0,IsToUs).split('.');
+  		var DataDomains = QuestionName.substr(0,IsToUs).split('.');
+  		HandleQuestionToUs(DataDomains,response);
   		
-  		//is the question intended for one of the services we support
-	  	if(SubDomains.length > 1){
-			var ServiceID = SubDomains[SubDomains.length-1];
-			if(typeof(Services[ServiceID]) != 'undefined'){
-  			
-	  			//which Socket we wan't 
-	  			var PacketData = Numbase32.decode(SubDomains[SubDomains.length-2]);
-	            if(PacketData.length < 3){
-	                PrintInfo('	Data recived from client is corrupt. atleast cPoolId, LastRecivedID, DnsUpId and requestcounter needs to be set in a request');
-	            }else{
-	  			    var cPoolId = PacketData[0];
-	  			    var LastRecivedID = PacketData[1];
-	  			    var RequestCounter = PacketData[3];
-		  			var answercounter = 0;
-					PrintInfo('	question regarding session: '+cPoolId);
-  				
-		  			//If The ConnectionPoolID was unknown we create a connection with that id
-		  			if(typeof(ConnectionPool[cPoolId]) == 'undefined'){
-                        if(RequestCounter == 0){
-                            PrintInfo("	this is a new session to service "+ServiceID+" establishing new connection to service server");
-                            
-                            //we can send about 95 bytes of pure data per request
-                            ConnectionPool[cPoolId] = {'Data2ClientPerQuestion':95,'TotalSentToClient':0, 'TotalRecivedFromClient':0, 'data':new Buffer(0), 'socket': null, 'updata':[],'ServiceID':ServiceID,'DowndataID':0,'LastUpdataID':4};
-                            ConnectionPool[cPoolId].socket = net.connect(Services[ServiceID].port, Services[ServiceID].host,
-                                function(){
-                                    PrintInfo(cPoolId+ ' Connected to Service server with ServiceID: '+ConnectionPool[cPoolId].ServiceID);
-                            });
-                        
-                            ConnectionPool[cPoolId].socket.on('data', function(d) {
-                                PrintInfo(cPoolId+' Got packet with '+d.length+' bytes from Service server with ServiceID: '+ConnectionPool[cPoolId].ServiceID);
-                                ConnectionPool[cPoolId].data = Buffer.concat([ConnectionPool[cPoolId].data,d]);
-                                //ConnectionPool[cPoolId].datalen.push(d.length);
-                                //ConnectionPool[cPoolId].data.push(d);
-                                //
-                                if(ConnectionPool[cPoolId].Data2ClientPerQuestion < ConnectionPool[cPoolId].data.length){
-                                    ConnectionPool[cPoolId].socket.pause();
-                                }
-                            });
-                        
-                            ConnectionPool[cPoolId].socket.on('error', function(err) {
-                                PrintInfo(cPoolId+ " Got Error From Service server Connection");
-                            });
-                            ConnectionPool[cPoolId].socket.on('close', function() {
-                                PrintInfo(cPoolId+ ' Service server with ServiceID: '+ConnectionPool[cPoolId].ServiceID+'  disconnected');
-                            });
-                        }else{
-                            PrintInfo("Got a new cPoolId where the request counter was not 0. Probably a replay of dead session");
-                        }
-		  			}else{//The Connection Already exists in the connection pool
-  					
-		  				/*
-		  				############################################################
-		  				Handle upData from The client
-		  				############################################################
-		  				*/
-                        //console.error(SubDomains)
-		  				if(SubDomains.length > 2 && typeof(PacketData[2]) != 'undefined'){//When there is updata there is more than 2 extra subdomains
-  						    
-		  					//A subdomain can only be 63 bytes long so the data is splited in to several subdomains
-		  					var Bs32Data = '';
-		  					for(var i = 0;i<SubDomains.length-2;i++){
-		  						Bs32Data += SubDomains[i];
-		  					}
-                    
-		                    //var PacketData = Numbase32.decode(SubDomains[SubDomains.length-3]);
-		                    var UpdataID = PacketData[2];
-  					
-		  					if(typeof(ConnectionPool[cPoolId].updata[UpdataID]) == 'undefined'){
-		  						ConnectionPool[cPoolId].updata[UpdataID] = new Buffer(base32.decode(Bs32Data));
-		  						PrintInfo('Recived data width upid: ' + UpdataID);
-                                if(ConnectionPool[cPoolId].LastUpdataID == UpdataID-1){
-		  					        while(typeof(ConnectionPool[cPoolId].updata[ConnectionPool[cPoolId].LastUpdataID+1]) != 'undefined'){
-		  						        ConnectionPool[cPoolId].socket.write(
-                                            ConnectionPool[cPoolId].updata[ConnectionPool[cPoolId].LastUpdataID+1]
-                                        );
-                                        delete ConnectionPool[cPoolId].updata[ConnectionPool[cPoolId].LastUpdataID+1];
-		  						        //PrintInfo('submited '+(ConnectionPool[cPoolId].updata[ConnectionPool[cPoolId].LastUpdataID+1].length)+' bytes of updata width upid: ' + 
-                                        // (ConnectionPool[cPoolId].LastUpdataID+1)
-                                        // + '');
-                                        ConnectionPool[cPoolId].LastUpdataID += 1;
-		  					        }
-                                }
-		  					}else{
-		  						PrintInfo('	Got data width upid: ' + UpdataID + ' More than one time');
-		  					}
-  							//var RecivedInQuestion = ((Bs32Data.length/8.0)*b32cbits);
-		  					//var DatRecived = 0.0;//DataLeft - Bs32Data.length;
-							//var BytesRecvied = 0.0;
-		  					//When We recive the last part send it away
-		  					//for(DatOffset in ConnectionPool[cPoolId].updata[UpdataID]){
-		  					//	DatRecived += ConnectionPool[cPoolId].updata[UpdataID][DatOffset].length;
-		  					//}
-							//var BytesDatRecived = (DatRecived/8.0)*5.0;
-							/*
-		  					if(false){
-  							
-		  						var UpData = new Buffer(base32.decode(ConnectionPool[cPoolId].updata[UpdataID].join('')));
-								BytesRecvied = UpData.length;
-								ConnectionPool[cPoolId].TotalRecivedFromClient += BytesRecvied;
-		  						//process.stderr.write(ConnectionPool[cPoolId].updata[UpdataID], 'utf8');
-  						
-		  						delete ConnectionPool[cPoolId].updata[UpdataID];
-		  						//console.error(UpData.toString("base64"))
-		  						console.error('	Recived '+RecivedInQuestion+' bytes Proxyed full packet with '+BytesRecvied+' bytes to server');
-		  						ConnectionPool[cPoolId].socket.write(UpData);
-		  					}else{
-		  					//	console.error('	Recived '+RecivedInQuestion+' bytes the client will send another '+((DataLeft/8.0)*5.0)+' bytes and we have recived '+BytesDatRecived+" The client has sent: "+(TotalLength-DataLeft)+"  of "+ TotalLength +" bytes in the packet");
-		  					}*/
-  					
-		  					/*else{
-		  						console.error(cPoolId, "The client has sent its last pice of data but we have not gotten the full tcp packet. We must have missed a dns request or gotten it in wrong order");
-		  						console.error(ConnectionPool[cPoolId].updata[UpdataID].length,MetaData);
-		  					}*/
-		  					//}
-  					
-  					
-  				
-		  				}
-  				
-		  				/*
-		  				############################################################
-		  				Submit Data to The client
-		  				############################################################
-		  				*/
-  				
-		  				//A UDP dns answerpacket may not exced 512 bytes
-		  				var RemaningChars = 500;  //512-12 The static part of a dns response is 12 bytes
-		  				for(qt in response.question){
-  						
-		  					//console.error("Names", response.question[qt].name);
-  						
-		  					RemaningChars -= response.question[qt].name.length + 6;
-		  				}
-  					
-		  				//console.error("RemaningBytes", RemaningBytes);
-		  				var TotalBytes = 0;
-  					
-  					
-		  				var CharsPerAnswer = 255;//An answer can only hold 255 Chars
-		  				//While we have Data in the buffers and the dns answer is not to long
-		  				while(ConnectionPool[cPoolId].data.length != 0 && RemaningChars > 0){
-  						
-  						
-		  					//We wait with converting the data to base64 until now to save memory
-		  					/*if(typeof(ConnectionPool[cPoolId].data[0]) != 'string'){
-		  						ConnectionPool[cPoolId].data[0] = ConnectionPool[cPoolId].data[0].toString('base64')
-                                //console.error('_',ConnectionPool[cPoolId].data[0],'_')
-		  						ConnectionPool[cPoolId].datalen[0] = ConnectionPool[cPoolId].data[0].length
-		  					}*/
-  						
-  						
-		  					//Save stuff to put in the answer so that we have it if the current buffer is removed below
-		  					//var RemLength = ConnectionPool[cPoolId].data[0].length;
-		  					var UseDownID = ConnectionPool[cPoolId].DowndataID;
-                            //var PacketLen = ConnectionPool[cPoolId].datalen[0];
-  						
-		  					var DatArrs = [];
-  						
-  						
-		  					//Numbase32.encode([Math.round(Math.random()*100000)]);
-		  					var NameToUse = response.question[x].name;
-		  					var MetaToClient = cPoolId+"."+UseDownID+'.'+ConnectionPool[cPoolId].data.length+':';
-  						
-		  					var CharsInAnswer = Math.min(CharsPerAnswer,RemaningChars)-NameToUse.length-12-MetaToClient.length;//There is 12 static bytes in a txt record
-  						
-		  					if( 0 < CharsInAnswer){
-                                var MaxBytesinAnswer =  Math.floor(CharsInAnswer *(6/8));
-                                var BytesinAnswer =  Math.min(MaxBytesinAnswer, ConnectionPool[cPoolId].data.length);
-                                TotalBytes += BytesinAnswer;
-
-		  						DatArrs.push(MetaToClient + ConnectionPool[cPoolId].data.slice(0,BytesinAnswer).toString('base64'));
-		  						ConnectionPool[cPoolId].data = ConnectionPool[cPoolId].data.slice(BytesinAnswer);
-		  						ConnectionPool[cPoolId].DowndataID++;
-                                if(ConnectionPool[cPoolId].Data2ClientPerQuestion > ConnectionPool[cPoolId].data.length){
-                                    ConnectionPool[cPoolId].socket.resume();
-                                }
-
-		  						/*if(ConnectionPool[cPoolId].data.length > BytesInAnswer){
-		  							DatArrs.push(MetaToClient+ConnectionPool[cPoolId].data[0].substr(0,BytesInAnswer));
-		  							ConnectionPool[cPoolId].data[0] = ConnectionPool[cPoolId].data[0].substr(BytesInAnswer);
-		  						}else{
-		  							DatArrs.push(MetaToClient+ConnectionPool[cPoolId].data.shift());
-                                    if(ConnectionPool[cPoolId].Data2ClientPerQuestion > ConnectionPool[cPoolId].data.length){
-                                        ConnectionPool[cPoolId].socket.resume();
-                                    }
-		  						}*/
-  					
-  					
-		  						//The loop is unnececary
-		  						for(DPA in DatArrs){
-		  							//console.error('Answer',DatArrs[DPA]);
-		  							RemaningChars -= DatArrs[DPA].length+NameToUse.length+12;//A answer costs some static bytes
-							        //TotalBytes += DatArrs[DPA].length/4; // devided by for cause of b64
-		  							response.answer.push(dns.TXT({
-		  								name: NameToUse,
-		    							data: DatArrs[DPA],
-		    							ttl: 1
-		  							}));
-		  							answercounter++;
-		  						}
-		  					}else{
-		  						break;
-		  					}
-		  				}
-						if(TotalBytes != 0){
-							PrintInfo("	Sent "+TotalBytes+" bytes to Client");
-							ConnectionPool[cPoolId].TotalSentToClient += TotalBytes;
-						}
-		  			}
-	            }
-	  		}else{
-  	            PrintInfo("Client ask for a service that we dont support:",request.question[x].name);
-	  			/*
-	  			response.answer.push(dns.TXT({
-	    			name: "Unknown.service.alias",
-	    			data: '127.0.0.2',
-	    			ttl: 1,
-	  			}));*/
-	  		}
-		}else{
-  	        PrintInfo("Question does not apper to be corectly formated:",request.question[x].name);
-	  		/*
-	  		response.answer.push(dns.TXT({
-	    		name: "to.few.subdomain.entrys",
-	    		data: '127.0.0.2',
-	    		ttl: 1,
-	  		}));*/
-	  	}
   	}else{
   	    PrintInfo("Question not for us:",request.question[x].name);
   	/*
@@ -360,4 +133,189 @@ if(UseTcp){
 	tcpserver.on('close', onClose);
 
 	tcpserver.serve(options.port, options.listenip);
+}
+
+function CreateNewSession(cPoolId, ServiceID){
+    //we can send about 95 bytes of pure data per Question
+    ConnectionPool[cPoolId] = {'Data2ClientPerQuestion':95,'TotalSentToClient':0, 'TotalRecivedFromClient':0, 'data':new Buffer(0), 'socket': null, 'updata':[],'ServiceID':ServiceID,'DowndataID':0,'LastUpdataID':4};
+    ConnectionPool[cPoolId].socket = net.connect(Services[ServiceID].port, Services[ServiceID].host,
+        function(){
+            PrintInfo(cPoolId+ ' Connected to Service server with ServiceID: '+ConnectionPool[cPoolId].ServiceID);
+    });
+
+    ConnectionPool[cPoolId].socket.on('data', function(d) {
+        PrintInfo(cPoolId+' Got packet with '+d.length+' bytes from Service server with ServiceID: '+ConnectionPool[cPoolId].ServiceID);
+        ConnectionPool[cPoolId].data = Buffer.concat([ConnectionPool[cPoolId].data,d]);
+        //ConnectionPool[cPoolId].datalen.push(d.length);
+        //ConnectionPool[cPoolId].data.push(d);
+        //
+        if(ConnectionPool[cPoolId].Data2ClientPerQuestion < ConnectionPool[cPoolId].data.length){
+            ConnectionPool[cPoolId].socket.pause();
+        }
+    });
+
+    ConnectionPool[cPoolId].socket.on('error', function(err) {
+        PrintInfo(cPoolId+ " Got Error From Service server Connection");
+    });
+    ConnectionPool[cPoolId].socket.on('close', function() {
+        PrintInfo(cPoolId+ ' Service server with ServiceID: '+ConnectionPool[cPoolId].ServiceID+'  disconnected');
+    });
+}
+
+function HandleClientData(cPoolId,DataDomains,PacketData){
+	//A subdomain can only be 63 bytes long so the data is splited in to several subdomains
+	var Bs32Data = '';
+	for(var i = 0;i<DataDomains.length-2;i++){
+		Bs32Data += DataDomains[i];
+	}
+
+    //var PacketData = Numbase32.decode(DataDomains[DataDomains.length-3]);
+    var UpdataID = PacketData[2];
+
+	if(typeof(ConnectionPool[cPoolId].updata[UpdataID]) == 'undefined'){
+		ConnectionPool[cPoolId].updata[UpdataID] = new Buffer(base32.decode(Bs32Data));
+		PrintInfo('Recived data width upid: ' + UpdataID);
+        if(ConnectionPool[cPoolId].LastUpdataID+1 == UpdataID){
+	        while(typeof(ConnectionPool[cPoolId].updata[ConnectionPool[cPoolId].LastUpdataID+1]) != 'undefined'){
+		        ConnectionPool[cPoolId].socket.write(
+                    ConnectionPool[cPoolId].updata[ConnectionPool[cPoolId].LastUpdataID+1]
+                );
+                delete ConnectionPool[cPoolId].updata[ConnectionPool[cPoolId].LastUpdataID+1];
+                ConnectionPool[cPoolId].LastUpdataID += 1;
+	        }
+        }
+	}else{
+		PrintInfo('	Got data width upid: ' + UpdataID + ' More than one time');
+	}
+}
+
+function HandleServerData(cPoolId, response){
+	var SmalestQuestion = 0;
+	//A UDP dns answerpacket may not exced 512 bytes
+	var RemaningChars = 500;  //512-12 The static part of a dns response is 12 bytes
+	for(qt in response.question){
+		SmalestQuestion = qt;
+		RemaningChars -= response.question[qt].name.length + 8;
+	}
+
+	//console.error("RemaningBytes", RemaningBytes);
+	var TotalBytes = 0;
+
+
+	var CharsPerAnswer = 254;//An answer can only hold 254 Chars
+	//While we have Data in the buffers and the dns answer is not to long
+	while(ConnectionPool[cPoolId].data.length != 0 && RemaningChars > 0){
+	
+	
+		var UseDownID = ConnectionPool[cPoolId].DowndataID;
+		var DatArrs = [];
+	
+	
+		//Numbase32.encode([Math.round(Math.random()*100000)]);
+		var NameToUse = response.question[SmalestQuestion].name;
+		var MetaToClient = cPoolId+"."+UseDownID+'.'+ConnectionPool[cPoolId].data.length+':';
+	
+		var CharsInAnswer = Math.min(CharsPerAnswer,RemaningChars)-(13+MetaToClient.length);//There is 13 static bytes in a txt record
+	
+		if( 0 < CharsInAnswer){
+            var MaxBytesinAnswer =  Math.floor(CharsInAnswer *(6/8));
+            var BytesinAnswer =  Math.min(MaxBytesinAnswer, ConnectionPool[cPoolId].data.length);
+            TotalBytes += BytesinAnswer;
+
+			DatArrs.push(MetaToClient + ConnectionPool[cPoolId].data.slice(0,BytesinAnswer).toString('base64'));
+			ConnectionPool[cPoolId].data = ConnectionPool[cPoolId].data.slice(BytesinAnswer);
+			ConnectionPool[cPoolId].DowndataID++;
+            if(ConnectionPool[cPoolId].Data2ClientPerQuestion > ConnectionPool[cPoolId].data.length){
+                ConnectionPool[cPoolId].socket.resume();
+            }
+
+
+			//The loop is unnececary
+			for(DPA in DatArrs){
+				//console.error('Answer',DatArrs[DPA]);
+				RemaningChars -= DatArrs[DPA].length+13;//A answer costs some static bytes
+				response.answer.push(dns.TXT({
+					name: NameToUse,
+					data: DatArrs[DPA],
+					ttl: 1
+				}));
+			}
+		}else{
+			break;
+		}
+	}
+	if(TotalBytes != 0){
+		PrintInfo("	Sent "+TotalBytes+" bytes to Client");
+		ConnectionPool[cPoolId].TotalSentToClient += TotalBytes;
+	}
+}
+
+function HandleQuestionToUs(DataDomains,response){
+	//is the question intended for one of the services we support
+  	if(DataDomains.length > 1){
+		var ServiceID = DataDomains[DataDomains.length-1];
+		if(typeof(Services[ServiceID]) != 'undefined'){
+		
+  			//which Socket we wan't 
+  			var PacketData = Numbase32.decode(DataDomains[DataDomains.length-2]);
+            if(PacketData.length < 3){
+                PrintInfo('	Data recived from client is corrupt. atleast cPoolId, LastRecivedID, DnsUpId and requestcounter needs to be set in a request');
+            }else{
+  			    var cPoolId = PacketData[0];
+  			    var LastRecivedID = PacketData[1];
+  			    var RequestCounter = PacketData[3];
+				PrintInfo('	question regarding session: '+cPoolId);
+			
+	  			
+	  			if(typeof(ConnectionPool[cPoolId]) == 'undefined'){
+					//If The ConnectionPoolID was unknown we create a connection with that id
+                    if(RequestCounter == 0){
+                        PrintInfo("	this is a new session to service "+ServiceID+" establishing new connection to service server");
+                        CreateNewSession(cPoolId, ServiceID);
+                        
+                    }else{
+                        PrintInfo("Got a new cPoolId where the request counter was not 0. Probably a replay of dead session");
+                    }
+	  			}else{
+					//The Connection Already exists in the connection pool
+				
+	  				/*
+	  				############################################################
+	  				Handle upData from The client
+	  				############################################################
+	  				*/
+	  				if(DataDomains.length > 2 && typeof(PacketData[2]) != 'undefined'){
+						//When there is updata there is more than 2 extra subdomains
+						HandleClientData(cPoolId,DataDomains,PacketData);
+	  				}
+			
+	  				/*
+	  				############################################################
+	  				Submit Data to The client
+	  				############################################################
+	  				*/
+			
+	  				HandleServerData(cPoolId, response);
+					
+	  			}
+            }
+  		}else{
+            PrintInfo("Client ask for a service that we dont support:",request.question[x].name);
+  			/*
+  			response.answer.push(dns.TXT({
+    			name: "Unknown.service.alias",
+    			data: '127.0.0.2',
+    			ttl: 1,
+  			}));*/
+  		}
+	}else{
+        PrintInfo("Question does not apper to be corectly formated:",request.question[x].name);
+  		/*
+  		response.answer.push(dns.TXT({
+    		name: "to.few.subdomain.entrys",
+    		data: '127.0.0.2',
+    		ttl: 1,
+  		}));*/
+  	}
+	
 }
