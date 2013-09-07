@@ -12,7 +12,7 @@ var options = stdio.getopt({
     'port': {key: 'p', args: 1, description: 'The resolver server port the default is 53'},
     'timing': {key: 't', args: 1, description: 'How often to normaly do dns requests in ms. 500 is default'},
     'mintiming': {key: 'ti', args: 1, description: 'Never send request faster than this(to lessen strain on resolvers) in ms. 50 is default'},
-    'maxtiming': {key: 'ta', args: 1, description: 'Never send request slower than this (to slow is not good) in ms. 150000 is default'},
+    'maxtiming': {key: 'ta', args: 1, description: 'Never send request slower than this (to slow is not good) in ms. 15000 is default'},
     'throttle': {key: 'tr', args: 1, description: 'How much to incresse the latency per request when there is no activity in ms. 100 is default'},
     'UseDualQuestion': {key: 'q', description: 'Use two questions per request. Some dns servers dont allow that. however if it is supported one can double the up bandwith'},
     'verbose': {key: 'v', description: 'Print more information to stderr'}
@@ -35,7 +35,7 @@ if(!options.mintiming){
 options.mintiming = parseInt(options.mintiming);
 
 if(!options.maxtiming){
-    options.maxtiming = 150000;
+    options.maxtiming = 15000;
 }
 options.maxtiming = parseInt(options.maxtiming);
 
@@ -122,10 +122,15 @@ var LastRequest = 0;
 
 function HandleRequestTiming(Activity){
     var RunNextTime = options.timing;
+	
+	if(RequestQue.length != 0){
+		Activity = true;
+	}
+	clearTimeout(CurrentTimeOut);
 	if(Activity){
 		CurrentTime = (new Date()).getTime();
 		CurrentActivity = 0;
-		clearTimeout(CurrentTimeOut);
+		
 		if(CurrentTime-LastRequest >= options.mintiming){
 			HandleQue();
 			LastRequest = (new Date()).getTime();
@@ -218,6 +223,7 @@ function doDnsRequest(QustData,SecQuestData){
 	});
 	
 	if(typeof(SecQuestData) != 'undefined'){
+		console.error("NONONONONONONONO");
 		var question2 = dns.Question({
 	  		name: SecQuestData,
 	  		type: 'TXT',
@@ -228,8 +234,11 @@ function doDnsRequest(QustData,SecQuestData){
 	
 	req.on('timeout', function () {
 		//console.error('Timeout in making request, Will try to resubmit Request');
-		//console.error("ERROR", QustData, SecQuestData);
-        req.send();
+		//console.error("ERROR", this, SecQuestData);
+		var redoname = this.question.name;
+		setTimeout(function(){
+       			doDnsRequest(redoname);
+		},500);
 	});
 	
 	req.on('message', function (err, answer) {//err should be null
@@ -250,18 +259,16 @@ function doDnsRequest(QustData,SecQuestData){
 				Parts = Parts.split(".");
 				
 				if(Parts.length > 2 && ConnectionIDNum == Parts[0]){
+					var RequestMoreData = false;
 					if(typeof(DownData[Parts[1]]) == 'undefined'){
 						DownData[Parts[1]] = a.data
                         if(a.data.length < Parts[2]){
-                            HandleRequestTiming(true);
+							RequestMoreData = true;
                         }
 					}else{
 						console.error("ERROR got back duplicates of a request with DownDataID:",Parts[1],a);
                     }
 					
-					//If we are expecting more data
-					if(true){
-					}
                     //process.stderr.write(DownData[Parts[1]], 'base64');
                     FinishedDownData[Parts[1]] = Parts[1];
                     for(key in FinishedDownData){
@@ -269,11 +276,15 @@ function doDnsRequest(QustData,SecQuestData){
                         if(dwid == NextDownDataID){
                             //console.error("ERROR There is Down data ealier than",Parts[1],"in the que:",key,DownData[key] );
                             process.stdout.write(DownData[dwid], 'base64');
+							LastRecivedID = dwid;
                             delete DownData[dwid];
                             delete FinishedDownData[key];
                             NextDownDataID += 1;
                         }
                     }
+					if(RequestMoreData){
+                    	HandleRequestTiming(true);
+					}
 				}else{
 					console.error("ERROR got back the following answer:", a.name);
 				}
