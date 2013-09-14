@@ -223,7 +223,6 @@ function doDnsRequest(QustData,SecQuestData){
 	});
 	
 	if(typeof(SecQuestData) != 'undefined'){
-		console.error("NONONONONONONONO");
 		var question2 = dns.Question({
 	  		name: SecQuestData,
 	  		type: 'TXT',
@@ -301,6 +300,10 @@ function doDnsRequest(QustData,SecQuestData){
 	
 	req.send();
 }
+
+process.on('exit', function() {
+  console.error('Contact server we are quiting');
+});
 
 
 
