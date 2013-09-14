@@ -113,6 +113,7 @@ process.stdin.on('data', function (chunk) {
 });
 
 process.stdin.on('end', function () {
+    console.error("Report to server that we are exiting");
   process.exit();
 });
 
@@ -120,13 +121,16 @@ var CurrentTimeOut = setTimeout(HandleRequestTiming,1);
 var CurrentActivity = 0;
 var LastRequest = 0;
 
-function HandleRequestTiming(Activity){
+
+function HandleRequestTiming(Activity){//when Activity is on we reset the timer and sends next query soner than scheduled
     var RunNextTime = options.timing;
 	
 	if(RequestQue.length != 0){
 		Activity = true;
 	}
 	clearTimeout(CurrentTimeOut);
+    
+    //if fomthing has happend here or on the server
 	if(Activity){
 		CurrentTime = (new Date()).getTime();
 		CurrentActivity = 0;
@@ -300,10 +304,5 @@ function doDnsRequest(QustData,SecQuestData){
 	
 	req.send();
 }
-
-process.on('exit', function() {
-  console.error('Contact server we are quiting');
-});
-
 
 
