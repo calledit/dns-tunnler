@@ -95,7 +95,7 @@ var ConnectionIDNum = Math.round(Math.random()*100000);
 var SubmitedTotData = 0;
 
 var AppendStr = '.'+ServiceAlias+'.'+ProxyOwner
-var RequestQue = [];
+var DomainNameQue = [];
 
 //Handle Input from the ssh client
 process.openStdin();
@@ -119,13 +119,13 @@ process.stdin.on('end', function () {
 
 var CurrentTimeOut = setTimeout(HandleDomainNameQue,1);
 var CurrentActivity = 0;
-var LastRequest = 0;
+var WhenWasTheLastRequestSubmited = 0;
 
 
 function HandleDomainNameQue(Activity){//when Activity is on we reset the timer and sends next query soner than scheduled
-    var RunNextTime = options.timing;
+    var When2RunNextTime = options.timing;
 	
-	if(RequestQue.length != 0){
+	if(DomainNameQue.length != 0){
 		Activity = true;
 	}
 	clearTimeout(CurrentTimeOut);
@@ -135,32 +135,32 @@ function HandleDomainNameQue(Activity){//when Activity is on we reset the timer 
 		CurrentTime = (new Date()).getTime();
 		CurrentActivity = 0;
 		
-		if(CurrentTime-LastRequest >= options.mintiming){
+		if(CurrentTime - WhenWasTheLastRequestSubmited >= options.mintiming){
 			SubmitRequestFromDomainNameQue();
-			LastRequest = (new Date()).getTime();
+			WhenWasTheLastRequestSubmited = (new Date()).getTime();
 		}else{
-            RunNextTime = options.mintiming - (CurrentTime-LastRequest);
+            When2RunNextTime = options.mintiming - (CurrentTime-WhenWasTheLastRequestSubmited);
         }
 	}else{
 		SubmitRequestFromDomainNameQue();
-		LastRequest = (new Date()).getTime();
+		WhenWasTheLastRequestSubmited = (new Date()).getTime();
 		CurrentActivity = Math.min(CurrentActivity + options.throttle, options.maxtiming);
-        RunNextTime = options.timing+CurrentActivity;
+        When2RunNextTime = options.timing+CurrentActivity;
 	}
-	CurrentTimeOut = setTimeout(HandleDomainNameQue, RunNextTime);
+	CurrentTimeOut = setTimeout(HandleDomainNameQue, When2RunNextTime);
 }
 
 
 function Add2DomainNameQue(req1, req2){
-    RequestQue.push([req1, req2])
+    DomainNameQue.push([req1, req2])
 	RequestCounter++;
 }
 
 function SubmitRequestFromDomainNameQue(){
-    if(RequestQue.length == 0){
+    if(DomainNameQue.length == 0){
         SubmitDnsRequest();
     }else{
-        var nextRequest = RequestQue.shift()
+        var nextRequest = DomainNameQue.shift()
         SubmitDnsRequest(nextRequest[0], nextRequest[1]);
     }
 }
@@ -171,13 +171,13 @@ function InputData2DomainNames(InputData){
 	while(InputData.length != SubmitedBytes){
 		
         var DomainName = InputData2DomainName();
-		var QsDat2;
+		var SecondDomainName;
 
 		//If We should use the secound query
 		if(options.UseDualQuestion && InputData.length != SubmitedBytes){
-            QsDat2 = InputData2DomainName();
+            SecondDomainName = InputData2DomainName();
 		}
-		Add2DomainNameQue(DomainName,QsDat2);
+		Add2DomainNameQue(DomainName, SecondDomainName);
 	}
 	SubmitedTotData += SubmitedBytes;
 
