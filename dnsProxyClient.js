@@ -108,8 +108,8 @@ process.stdin.resume();
 
 //When we get data from the ssh Client
 process.stdin.on('data', function (chunk) {
-	CreateRequestsFromClientData(chunk);
-	HandleRequestTiming(true);
+	InputData2DomainNames(chunk);
+	HandleDomainNameQue(true);
 });
 
 process.stdin.on('end', function () {
@@ -117,12 +117,12 @@ process.stdin.on('end', function () {
   process.exit();
 });
 
-var CurrentTimeOut = setTimeout(HandleRequestTiming,1);
+var CurrentTimeOut = setTimeout(HandleDomainNameQue,1);
 var CurrentActivity = 0;
 var LastRequest = 0;
 
 
-function HandleRequestTiming(Activity){//when Activity is on we reset the timer and sends next query soner than scheduled
+function HandleDomainNameQue(Activity){//when Activity is on we reset the timer and sends next query soner than scheduled
     var RunNextTime = options.timing;
 	
 	if(RequestQue.length != 0){
@@ -130,65 +130,65 @@ function HandleRequestTiming(Activity){//when Activity is on we reset the timer 
 	}
 	clearTimeout(CurrentTimeOut);
     
-    //if fomthing has happend here or on the server
+    //if somthing has happend here or on the server
 	if(Activity){
 		CurrentTime = (new Date()).getTime();
 		CurrentActivity = 0;
 		
 		if(CurrentTime-LastRequest >= options.mintiming){
-			HandleQue();
+			SubmitRequestFromDomainNameQue();
 			LastRequest = (new Date()).getTime();
 		}else{
             RunNextTime = options.mintiming - (CurrentTime-LastRequest);
         }
 	}else{
-		HandleQue();
+		SubmitRequestFromDomainNameQue();
 		LastRequest = (new Date()).getTime();
 		CurrentActivity = Math.min(CurrentActivity + options.throttle, options.maxtiming);
         RunNextTime = options.timing+CurrentActivity;
 	}
-	CurrentTimeOut = setTimeout(HandleRequestTiming, RunNextTime);
+	CurrentTimeOut = setTimeout(HandleDomainNameQue, RunNextTime);
 }
 
 
-function AddToQue(req1, req2){
+function Add2DomainNameQue(req1, req2){
     RequestQue.push([req1, req2])
 	RequestCounter++;
 }
 
-function HandleQue(){
+function SubmitRequestFromDomainNameQue(){
     if(RequestQue.length == 0){
-        doDnsRequest();
+        SubmitDnsRequest();
     }else{
         var nextRequest = RequestQue.shift()
-        doDnsRequest(nextRequest[0], nextRequest[1]);
+        SubmitDnsRequest(nextRequest[0], nextRequest[1]);
     }
 }
 
-function CreateRequestsFromClientData(SendBuffer){
+function InputData2DomainNames(InputData){
 	
 	var SubmitedBytes = 0;
-	while(SendBuffer.length != SubmitedBytes){
+	while(InputData.length != SubmitedBytes){
 		
-        var QustData = CreateQuestionFromSendBuffer();
+        var DomainName = InputData2DomainName();
 		var QsDat2;
 
 		//If We should use the secound query
-		if(options.UseDualQuestion && SendBuffer.length != SubmitedBytes){
-            QsDat2 = CreateQuestionFromSendBuffer();
+		if(options.UseDualQuestion && InputData.length != SubmitedBytes){
+            QsDat2 = InputData2DomainName();
 		}
-		AddToQue(QustData,QsDat2);
+		Add2DomainNameQue(DomainName,QsDat2);
 	}
 	SubmitedTotData += SubmitedBytes;
 
-    function CreateQuestionFromSendBuffer(){
+    function InputData2DomainName(){
         var PacketData = Numbase32.encode([ConnectionIDNum, LastRecivedID, DNSPacketID, RequestCounter]);
-        var QustDataOrg = PacketData+AppendStr;
+        var DomainNameOrg = PacketData+AppendStr;
         
-        var UsableChars = Math.abs(Math.floor(MaxDataBytesInTxt-QustDataOrg.length));
-        var Bytes2Use = Math.min(SendBuffer.length-SubmitedBytes, Math.floor(UsableChars*(b32cbits/8)));
+        var UsableChars = Math.abs(Math.floor(MaxDataBytesInTxt-DomainNameOrg.length));
+        var Bytes2Use = Math.min(InputData.length-SubmitedBytes, Math.floor(UsableChars*(b32cbits/8)));
 
-        var ActualData = base32.encode(SendBuffer.slice(SubmitedBytes, SubmitedBytes + Bytes2Use));
+        var ActualData = base32.encode(InputData.slice(SubmitedBytes, SubmitedBytes + Bytes2Use));
         SubmitedBytes += Bytes2Use;
         
         var FormatedData = '';
@@ -198,23 +198,20 @@ function CreateRequestsFromClientData(SendBuffer){
         }
         FormatedData += ActualData + ".";
         DNSPacketID++;
-        return(FormatedData + QustDataOrg);
+        return(FormatedData + DomainNameOrg);
     }
 }
 
-function doDnsRequest(QustData,SecQuestData){
+function SubmitDnsRequest(DomainName, SecondDomainName){
 	
-    
-
-	if(typeof(QustData) == 'undefined'){
+	if(typeof(DomainName) == 'undefined'){
 		var PacketData = Numbase32.encode([ConnectionIDNum,LastRecivedID,DNSPacketID,RequestCounter]);
 	    RequestCounter++;
-		QustData = PacketData+AppendStr;
+		DomainName = PacketData+AppendStr;
 	}
 	
-	
 	var question = dns.Question({
-	  name: QustData,
+	  name: DomainName,
 	  type: 'TXT',
 	  class: 1
 	});
@@ -226,9 +223,9 @@ function doDnsRequest(QustData,SecQuestData){
 	  timeout: 7000
 	});
 	
-	if(typeof(SecQuestData) != 'undefined'){
+	if(typeof(SecondDomainName) != 'undefined'){
 		var question2 = dns.Question({
-	  		name: SecQuestData,
+	  		name: SecondDomainName,
 	  		type: 'TXT',
 	  		class: 1
 			});
@@ -236,11 +233,9 @@ function doDnsRequest(QustData,SecQuestData){
 	}
 	
 	req.on('timeout', function () {
-		//console.error('Timeout in making request, Will try to resubmit Request');
-		//console.error("ERROR", this, SecQuestData);
 		var redoname = this.question.name;
 		setTimeout(function(){
-       			doDnsRequest(redoname);
+       			SubmitDnsRequest(redoname);
 		},500);
 	});
 	
@@ -272,12 +267,10 @@ function doDnsRequest(QustData,SecQuestData){
 						console.error("ERROR got back duplicates of a request with DownDataID:",Parts[1],a);
                     }
 					
-                    //process.stderr.write(DownData[Parts[1]], 'base64');
                     FinishedDownData[Parts[1]] = Parts[1];
                     for(key in FinishedDownData){
                         var dwid = FinishedDownData[key];
                         if(dwid == NextDownDataID){
-                            //console.error("ERROR There is Down data ealier than",Parts[1],"in the que:",key,DownData[key] );
                             process.stdout.write(DownData[dwid], 'base64');
 							LastRecivedID = dwid;
                             delete DownData[dwid];
@@ -286,7 +279,7 @@ function doDnsRequest(QustData,SecQuestData){
                         }
                     }
 					if(RequestMoreData){
-                    	HandleRequestTiming(true);
+                    	HandleDomainNameQue(true);
 					}
 				}else{
 					console.error("ERROR got back the following answer:", a.name);
@@ -296,12 +289,6 @@ function doDnsRequest(QustData,SecQuestData){
 			}
 		});
 	});
-    
-	
-	req.on('end', function () {
-		//console.error("End1");
-	});
-	
 	req.send();
 }
 
