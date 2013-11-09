@@ -293,7 +293,8 @@ function SubmitDnsRequest(DomainName, SecondDomainName) {
 
 				var Splitpos = a.data.indexOf(':');
 				if (Splitpos == -1) {
-					console.error("could not find split pos ERROR");
+					console.error("ERROR answer not correctly formated could not find the split position got back the following answer data:", a.data);
+                    process.exit(3);
 				}
 				var Parts = a.data.substr(0, Splitpos);
 				a.data = a.data.substr(Splitpos + 1);
@@ -325,10 +326,12 @@ function SubmitDnsRequest(DomainName, SecondDomainName) {
 						HandleDomainNameQue(true);
 					}
 				} else {
-					console.error("ERROR got back the following answer:", a.name);
+					console.error("ERROR answer not correctly formated to few subdomains got back the following answer data:", a.data);
+                    process.exit(2);
 				}
 			} else {
-				console.error("Could not contact proxy server got back the following answer:", a.name);
+				console.error("ERROR answer not correctly formated it is not of type 16 got back the following answer:", a.name);
+                process.exit(1);
 			}
 		});
 	});

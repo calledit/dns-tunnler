@@ -22,6 +22,11 @@ var options = stdio.getopt({
 		args: 1,
 		description: 'The port to listen to default i 53'
 	},
+	'timeout': {
+		key: 't',
+		args: 1,
+		description: 'Nr of seconds of inacvivity untill the session is considerd dead default is 300'
+	},
 	'verbose': {
 		key: 'v',
 		description: 'Print more information to stderr'
@@ -34,6 +39,10 @@ if (!options.listenip) {
 if (!options.port) {
 	options.port = 53;
 }
+if (!options.timeout) {
+	options.timeout = 300;
+}
+options.timeout *= 1000;
 
 
 var b32cbits = 5;
@@ -100,7 +109,7 @@ var onMessage = function(request, response) {
 		var QuestionName = request.question[x].name;
 		var IsToUs = QuestionName.lastIndexOf(ProxyOwner);
 
-		//Does the question end with our Special Domain
+		//Does the question end with our Special Domain Example: dnsproxy.example.com
 		if (IsToUs != -1 && IsToUs == (QuestionName.length - ProxyOwner.length)) {
 
 			//Split the question in to its subdomains
@@ -176,12 +185,14 @@ function CreateNewSession(cPoolId, ServiceID) {
 		'ServiceID': ServiceID,
 		'DowndataID': 0,
 		'LastUpdataID': 4,
-		'PrevAnswers': []
+		'PrevAnswers': [],
+        'timeout':null
 	};
-	ConnectionPool[cPoolId].socket = net.connect(Services[ServiceID].port, Services[ServiceID].host,
-		function() {
+	ConnectionPool[cPoolId].socket = net.connect(Services[ServiceID].port, Services[ServiceID].host, function() {
 			PrintInfo(cPoolId + ' Connected to Service server with ServiceID: ' + ConnectionPool[cPoolId].ServiceID);
-		});
+	});
+
+    ConnectionPool[cPoolId].timout = setTimeout(ConnectionPool[cPoolId].socket.close, options.timeout);
 
 	ConnectionPool[cPoolId].socket.on('data', function(d) {
 		PrintInfo(cPoolId + ' Got packet with ' + d.length + ' bytes from Service server with ServiceID: ' + ConnectionPool[cPoolId].ServiceID);
@@ -199,6 +210,8 @@ function CreateNewSession(cPoolId, ServiceID) {
 	});
 	ConnectionPool[cPoolId].socket.on('close', function() {
 		PrintInfo(cPoolId + ' Service server with ServiceID: ' + ConnectionPool[cPoolId].ServiceID + '  disconnected');
+        clearTimeout(ConnectionPool[cPoolId].timout);
+        delete ConnectionPool[cPoolId];
 	});
 }
 
@@ -293,6 +306,7 @@ function HandleQuestionToUs(DataDomains, responseQuestion, requestQuestion, Answ
 			var PacketData = Numbase32.decode(DataDomains[DataDomains.length - 2]);
 			if (PacketData.length < 3) {
 				PrintInfo('	Data recived from client is corrupt. atleast cPoolId, LastRecivedID, DnsUpId and requestcounter needs to be set in a request');
+                ReportError(Answers, requestQuestion.name, "PacketData corupt");
 			} else {
 				var cPoolId = PacketData[0];
 				var LastRecivedID = PacketData[1];
@@ -308,15 +322,21 @@ function HandleQuestionToUs(DataDomains, responseQuestion, requestQuestion, Answ
 
 					} else {
 						PrintInfo("Got a new cPoolId where the request counter was not 0. Probably a replay of dead session");
+                        ReportError(Answers, requestQuestion.name, "SessionNotKnown");
 					}
 				} else {
 					//The Connection Already exists in the connection pool
+                    clearTimeout(ConnectionPool[cPoolId].timout);
+                    ConnectionPool[cPoolId].timout = setTimeout(ConnectionPool[cPoolId].socket.close, options.timeout);
+
+                    //Remove answers that we are sure the client has recived
 					for (reqid in ConnectionPool[cPoolId].PrevAnswers) {
 						if (ConnectionPool[cPoolId].PrevAnswers[reqid].LastDownDataID <= LastRecivedID) {
 							delete ConnectionPool[cPoolId].PrevAnswers[reqid];
 						}
 					}
 
+                    //Add answers that the client missed to the submit que
 					if (typeof(ConnectionPool[cPoolId].PrevAnswers[RequestCounter]) != 'undefined') {
 						for (ansid in ConnectionPool[cPoolId].PrevAnswers[RequestCounter].Ans) {
 							Answers.push(ConnectionPool[cPoolId].PrevAnswers[RequestCounter].Ans[ansid]);
@@ -348,6 +368,8 @@ function HandleQuestionToUs(DataDomains, responseQuestion, requestQuestion, Answ
 			}
 		} else {
 			PrintInfo("Client ask for a service that we dont support:", requestQuestion.name);
+            //ReportError(Answers, requestQuestion.name, "ServiceNotSupported");
+            
 			/*
   			response.answer.push(dns.TXT({
     			name: "Unknown.service.alias",
@@ -365,4 +387,13 @@ function HandleQuestionToUs(DataDomains, responseQuestion, requestQuestion, Answ
   		}));*/
 	}
 	return (RemaningChars);
+}
+
+
+function ReportError(Answers, Name, Error){
+    Answers.push(dns.TXT({
+        name: Name,
+        data: Error,
+        ttl: 1
+    }));
 }
