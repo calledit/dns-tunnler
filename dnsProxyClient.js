@@ -100,17 +100,17 @@ also each subdomain may maximumly be 63 bytes which means that we need to insert
 var MaxDNSNameData_Len = 253 - (options.dnsname.length + 1 + 20);
 MaxDNSNameData_Len -= Math.ceil(MaxDNSNameData_Len/63);
 var MaxDNSNameRawData_Len = Math.floor(MaxDNSNameData_Len * (dnt.b32cbits / 8));
-//MaxDNSNameRawData_Len = 30;
 
 //Create A random Number that will be the Id of our session
 var SessionID = false;
 var SubmitedBytes_Len = 0;
-var RecivedBytes_Len = 0;
+var NextByte_Len = 0;
 
 var DataFromUser_Arr = [];
+var DataFromServer_Arr = [];
 
 
-//When we get data from the ssh Client
+//Save All Data from STDIN TO DataFromUser_Arr
 process.stdin.on('data', function(UserData_Buf) {
     var SavedData_Len = 0;
     if(DataFromUser_Arr.length != 0){
@@ -133,22 +133,24 @@ process.stdin.on('end', function() {
 	process.exit();
 });
 
+//Start Capturing from stdin
 process.stdin.resume();
 
 var NextDNSRequest_TimeOut = setTimeout(MainLoop, 1);
 
+//Ask Server to start a new Session
 var Packet2Server = new dnt.ClientPacket();
 Packet2Server.commando = 2;
 Packet2Server.data = new Buffer(options.service);
 DnsLookup(Packet2Server.GetBinData()+"."+options.dnsname)
 
 function MainLoop(){
-    
+    //Only Conntact The server after we have acured a SessionID
     if(SessionID !== false){
         var Packet2Server = new dnt.ClientPacket();
         Packet2Server.sessionID = SessionID;
         Packet2Server.offset = SubmitedBytes_Len;
-            Packet2Server.recivedoffset = 0;
+        Packet2Server.recivedoffset = 0;
         Packet2Server.commando = 3;
         if(DataFromUser_Arr.length != 0){
             Data2Send = DataFromUser_Arr.shift();
@@ -159,14 +161,11 @@ function MainLoop(){
         } 
         DnsLookup(Packet2Server.GetBinData()+"."+options.dnsname)
     } 
-    
     NextDNSRequest_TimeOut = setTimeout(MainLoop, options.timing);
 }
 
 
 function DnsLookup(DnsName_Str){
-    
-    //console.error(DnsName_Str);
     
 	var req = dns.Request({
 		question: dns.Question({
@@ -196,7 +195,6 @@ function DnsLookup(DnsName_Str){
 			console.error("Got an error:", err);
 		}
 
-        //console.error(response);
         for(answerID in response.answer){
             var RecivedPacket = new dnt.ServerPacket(response.answer[answerID].data);
             switch(RecivedPacket.commando){
@@ -207,9 +205,17 @@ function DnsLookup(DnsName_Str){
 			            console.error("Got a session id twice.");
                     }
                     break;
-                case 1:
-                    //console.error("Got Data("+RecivedPacket.data.length+"): "+ RecivedPacket.data);
-                    process.stdout.write(RecivedPacket.data);
+                case 3://Empty response
+                    break;
+                case 1://Recived data from server
+                    DataFromServer_Arr[RecivedPacket.offset] = RecivedPacket.data;
+                    for(datOffset in DataFromServer_Arr){
+                        if(NextByte_Len == datOffset){
+                            NextByte_Len += DataFromServer_Arr[datOffset].length;
+                            process.stdout.write(DataFromServer_Arr[datOffset]);
+                        }
+                    }
+        
                     break;
                 case 5://New Session
 			        console.error("Server reported error: "+RecivedPacket.data.toString());

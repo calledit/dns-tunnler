@@ -71,6 +71,7 @@ module.exports.ClientPacket = function(BinData){
         if(BinData.length < 20){
             return(false);//Not a full header
         }
+        BinData = BinData.split('.').join('');
         var Headers = module.exports.Numbase32.decode(BinData.substr(0, 20));
         self.crc = Headers[0];
         self.sessionID = Headers[1];
@@ -101,6 +102,9 @@ module.exports.Session = function(host, port){
             offset = self.NextReadByte;
             EndByte = Math.min(self.data.length, offset+length);
             self.NextReadByte = EndByte;
+		    if (self.DataPerRequest + self.NextReadByte > self.data.length) {
+			    self.socket.resume();
+		    }
         }else{
             EndByte = Math.min(self.data.length, offset+length);
         }
@@ -126,8 +130,8 @@ module.exports.Session = function(host, port){
 	});
 	self.socket.on('data', function(d) {
 		self.data = Buffer.concat([self.data, d]);
-		if (self.DataPerRequest < self.data.length) {
-			//self.socket.pause();
+		if (self.DataPerRequest+self.NextByte < self.data.length) {
+			self.socket.pause();
 		}
 	});
     

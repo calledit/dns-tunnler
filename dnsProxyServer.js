@@ -74,11 +74,10 @@ function onDnsRequest(request, response) {
 		//A question to one of the services that we support should look somthing
 		//like: base32NUMdata base32data.dnsproxy.example.com
 		var QuestionName = request.question[x].name;
-console.error(QuestionName);
 
 		//Does the question end with our Special Domain Example: dnsproxy.example.com
 		if (QuestionName.substr(QuestionName.length - options.dnsname.length) == options.dnsname) {
-            var RecivedPacket = new dnt.ClientPacket(QuestionName.substr(0, QuestionName.length - options.dnsname.length).split('.').join(''));
+            var RecivedPacket = new dnt.ClientPacket(QuestionName.substr(0, QuestionName.length - options.dnsname.length));
             
             if(RecivedPacket){
                 var SubmitPacket = new dnt.ServerPacket();
@@ -93,8 +92,11 @@ console.error(QuestionName);
                         }else{
                             SubmitPacket.commando = 1;
                             Session.AddData(RecivedPacket.offset, RecivedPacket.data);
+                            SubmitPacket.offset = Session.NextReadByte;
                             SubmitPacket.data = Session.Read(100);
-                            //PrintInfo("Got Data from session: "+RecivedPacket.sessionID+" Data: "+RecivedPacket.data);
+                            if(SubmitPacket.data.length == 0){
+                                SubmitPacket.commando = 3;
+                            }
                         }
                         break;
                     case 2://New Session
