@@ -1,10 +1,9 @@
 var dns = require('native-dns'),
 	fs = require('fs'),
-	stdio = require('stdio');
+	stdio = require('stdio'),
+	dnt = require('./dnsProxyCommon.js');
 
-var Nibbler = require('./Nibbler.js').Nibbler;
-
-var options = stdio.getopt({
+var argDescr = {
 	'dnsname': {
 		key: 'd',
 		args: 1,
@@ -25,26 +24,36 @@ var options = stdio.getopt({
 	'port': {
 		key: 'p',
 		args: 1,
+        default: 53,
+        pharse: parseInt,
 		description: 'The resolver server port the default is 53'
 	},
 	'timing': {
 		key: 't',
 		args: 1,
+        default: 500,
+        pharse: parseInt,
 		description: 'How often to normaly do dns requests in ms. 500 is default'
 	},
 	'mintiming': {
 		key: 'ti',
 		args: 1,
+        default: 50,
+        pharse: parseInt,
 		description: 'Never send request faster than this(to lessen strain on resolvers) in ms. 50 is default'
 	},
 	'maxtiming': {
 		key: 'ta',
 		args: 1,
+        default: 15000,
+        pharse: parseInt,
 		description: 'Never send request slower than this (to slow is not good) in ms. 15000 is default'
 	},
 	'throttle': {
 		key: 'tr',
 		args: 1,
+        default: 100,
+        pharse: parseInt,
 		description: 'How much to incresse the latency per request when there is no activity in ms. 100 is default'
 	},
 	'UseDualQuestion': {
@@ -55,7 +64,10 @@ var options = stdio.getopt({
 		key: 'v',
 		description: 'Print more information to stderr'
 	}
-});
+};
+
+//Pharse Arguments
+var options = stdio.getopt(argDescr);
 
 if (!options.resolver) {
 	options.resolver = '127.0.0.1';
@@ -68,93 +80,151 @@ if (!options.resolver) {
 	}
 }
 
-if (!options.mintiming) {
-	options.mintiming = 15;
+//Set Default Argument Values and pharse them
+for(ArgName in argDescr){
+    if(!options[ArgName] && argDescr[ArgName].default){
+        options[ArgName] = argDescr[ArgName].default;
+    }
+    
+    if(argDescr[ArgName].pharse && options[ArgName]){
+        options[ArgName] = argDescr[ArgName].pharse(options[ArgName]);
+    }
 }
-options.mintiming = parseInt(options.mintiming);
-
-if (!options.maxtiming) {
-	options.maxtiming = 15000;
-}
-options.maxtiming = parseInt(options.maxtiming);
-
-if (!options.throttle) {
-	options.throttle = 100;
-}
-options.throttle = parseInt(options.throttle);
-
-if (!options.timing) {
-	options.timing = 500;
-}
-options.timing = parseInt(options.timing);
-
-if (!options.port) {
-	options.port = 53;
-}
-options.port = parseInt(options.port);
-
-var ResolveServer = options.resolver;
-var ResolveServerPort = options.port;
-var ServiceAlias = options.service;
-var ProxyOwner = options.dnsname;
 
 
 /*
-A DNS name can be at max 253 (some places say 255 but i think they count with the start and stop bytes) bytes long and
-each subdomain maximumly 63 bytes which means that we need to insert 4 dots thats where 249 comes from
+A DNS name can be at max 253 (some places say 255 but i think they count with the start and stop bytes) bytes long
+Then we remove 1 due to the dot before "options.dnsname" and 20 the header length
+also each subdomain may maximumly be 63 bytes which means that we need to insert dots.
 */
-var MaxDataBytesInTxt = 249;
-var RequestCounter = 0;
-var LastRecivedID = 0;
-var DNSPacketID = 5;
-
-var b32cbits = 5;
-var base32 = new Nibbler({
-	dataBits: 8,
-	codeBits: b32cbits,
-	keyString: 'ABCDEFGHIJKLMNOPQRSTUVWXYZ123456789',
-	pad: '',
-	arrayData: true
-});
-
-var Numbase32 = new Nibbler({
-	dataBits: 20,
-	codeBits: b32cbits,
-	keyString: 'ABCDEFGHIJKLMNOPQRSTUVWXYZ123456789',
-    pad: '',
-	arrayData: true
-});
-
-var DownData = [];
-var FinishedDownData = [];
-var NextDownDataID = 0;
+var MaxDNSNameData_Len = 253 - (options.dnsname.length + 1 + 20);
+MaxDNSNameData_Len -= Math.ceil(MaxDNSNameData_Len/63);
+var MaxDNSNameRawData_Len = Math.floor(MaxDNSNameData_Len * (dnt.b32cbits / 8));
+//MaxDNSNameRawData_Len = 30;
 
 //Create A random Number that will be the Id of our session
-var ConnectionIDNum = Math.round(Math.random() * 100000);
-var SubmitedTotData = 0;
+var SessionID = false;
+var SubmitedBytes_Len = 0;
+var RecivedBytes_Len = 0;
 
-var AppendStr = '.' + ServiceAlias + '.' + ProxyOwner
-var DomainNameQue = [];
-
-//Handle Input from the ssh client
-process.openStdin();
-process.stdin.resume();
-
-
-//Force Raw mode i someone might wan't this
-//require('tty').setRawMode(true);
+var DataFromUser_Arr = [];
 
 
 //When we get data from the ssh Client
-process.stdin.on('data', function(chunk) {
-	InputData2DomainNames(chunk);
-	HandleDomainNameQue(true);
+process.stdin.on('data', function(UserData_Buf) {
+    var SavedData_Len = 0;
+    if(DataFromUser_Arr.length != 0){
+        if(DataFromUser_Arr[DataFromUser_Arr.length-1].length < MaxDNSNameRawData_Len){//If the last one is not filed up
+            var MissingData_Len = MaxDNSNameRawData_Len - DataFromUser_Arr[DataFromUser_Arr.length-1].length;
+            SavedData_Len = Math.min(MissingData_Len, DataFromUser_Arr[DataFromUser_Arr.length-1].length);
+            DataFromUser_Arr[DataFromUser_Arr.length-1] = Buffer.concat([DataFromUser_Arr[DataFromUser_Arr.length-1], UserData_Buf.slice(0, SavedData_Len)]);
+        }
+    }
+    
+    while(SavedData_Len < UserData_Buf.length){
+        var BytesToShave = Math.min(MaxDNSNameRawData_Len, UserData_Buf.length - SavedData_Len);
+        DataFromUser_Arr.push(UserData_Buf.slice(SavedData_Len, SavedData_Len + BytesToShave));
+        SavedData_Len += BytesToShave;
+    }
 });
 
 process.stdin.on('end', function() {
 	console.error("Report to server that we are exiting");
 	process.exit();
 });
+
+process.stdin.resume();
+
+var NextDNSRequest_TimeOut = setTimeout(MainLoop, 1);
+
+var Packet2Server = new dnt.ClientPacket();
+Packet2Server.commando = 2;
+Packet2Server.data = new Buffer(options.service);
+DnsLookup(Packet2Server.GetBinData()+"."+options.dnsname)
+
+function MainLoop(){
+    
+    if(SessionID !== false){
+        var Packet2Server = new dnt.ClientPacket();
+        Packet2Server.sessionID = SessionID;
+        Packet2Server.offset = SubmitedBytes_Len;
+            Packet2Server.recivedoffset = 0;
+        Packet2Server.commando = 3;
+        if(DataFromUser_Arr.length != 0){
+            Data2Send = DataFromUser_Arr.shift();
+            Packet2Server.commando = 1;
+            Packet2Server.data = Data2Send;
+
+            SubmitedBytes_Len += Data2Send.length;
+        } 
+        DnsLookup(Packet2Server.GetBinData()+"."+options.dnsname)
+    } 
+    
+    NextDNSRequest_TimeOut = setTimeout(MainLoop, options.timing);
+}
+
+
+function DnsLookup(DnsName_Str){
+    
+    //console.error(DnsName_Str);
+    
+	var req = dns.Request({
+		question: dns.Question({
+            name: DnsName_Str,
+            type: 'TXT',
+             class: 1
+        }),
+		server: {
+			address: options.resolver,
+			port: options.port,
+			type: 'udp'
+		},
+		cache: false,
+		timeout: 7000
+	});
+
+	req.on('timeout', function() {
+        console.error("timed out")
+		//var redoname = this.question.name;
+		//setTimeout(function() {
+			//SubmitDnsRequest(redoname);
+		//}, 500);
+	});
+
+	req.on('message', function(err, response) { //err should be null
+		if (err != null) {
+			console.error("Got an error:", err);
+		}
+
+        //console.error(response);
+        for(answerID in response.answer){
+            var RecivedPacket = new dnt.ServerPacket(response.answer[answerID].data);
+            switch(RecivedPacket.commando){
+                case 2:
+                    if(SessionID === false){
+                        SessionID = parseInt(RecivedPacket.data.toString());
+                    }else{
+			            console.error("Got a session id twice.");
+                    }
+                    break;
+                case 1:
+                    //console.error("Got Data("+RecivedPacket.data.length+"): "+ RecivedPacket.data);
+                    process.stdout.write(RecivedPacket.data);
+                    break;
+                case 5://New Session
+			        console.error("Server reported error: "+RecivedPacket.data.toString());
+                    break;
+                default:
+                    console.error("Unknown commando: "+RecivedPacket.commando);
+                    break;
+            }
+        }
+    });
+	req.send();
+}
+
+/*
+//process.exit();
 
 var CurrentTimeOut = setTimeout(HandleDomainNameQue, 1);
 var CurrentActivity = 0;
@@ -337,3 +407,4 @@ function SubmitDnsRequest(DomainName, SecondDomainName) {
 	});
 	req.send();
 }
+*/

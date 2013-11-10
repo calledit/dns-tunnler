@@ -1,11 +1,9 @@
 var dns = require('native-dns'),
 	stdio = require('stdio'),
 	server = dns.createServer(),
-	tcpserver,
-	net = require('net'),
-	Nibbler = require('./Nibbler.js').Nibbler;
+	dnt = require('./dnsProxyCommon.js');
 
-var options = stdio.getopt({
+var argDescr = {
 	'dnsname': {
 		key: 'd',
 		args: 1,
@@ -15,86 +13,55 @@ var options = stdio.getopt({
 	'listenip': {
 		key: 'l',
 		args: 1,
+        default: '0.0.0.0',
 		description: 'The ip number to start listening to default is 0.0.0.0'
 	},
 	'port': {
 		key: 'p',
 		args: 1,
+        default: 53,
+        pharse: parseInt,
 		description: 'The port to listen to default i 53'
 	},
 	'timeout': {
 		key: 't',
 		args: 1,
+        default: 300,
+        pharse: function(timeout){return(parseInt(timeout)*1000)},
 		description: 'Nr of seconds of inacvivity untill the session is considerd dead default is 300'
 	},
 	'verbose': {
 		key: 'v',
 		description: 'Print more information to stderr'
 	}
-});
+};
+var options = stdio.getopt(argDescr);
 
-if (!options.listenip) {
-	options.listenip = '0.0.0.0';
+//Set Default Argument Values and pharse them
+for(ArgName in argDescr){
+    if(!options[ArgName] && argDescr[ArgName].default){
+        options[ArgName] = argDescr[ArgName].default;
+    }
+    
+    if(argDescr[ArgName].pharse && options[ArgName]){
+        options[ArgName] = argDescr[ArgName].pharse(options[ArgName]);
+    }
 }
-if (!options.port) {
-	options.port = 53;
-}
-if (!options.timeout) {
-	options.timeout = 300;
-}
-options.timeout *= 1000;
-
-
-var b32cbits = 5;
-var base32 = new Nibbler({
-	dataBits: 8,
-	codeBits: b32cbits,
-	keyString: 'ABCDEFGHIJKLMNOPQRSTUVWXYZ123456789',
-	pad: '',
-	arrayData: true
-});
-
-
-var BeVerbose = options.verbose;
-
-
-
-var Numbase32 = new Nibbler({
-	dataBits: 20,
-	codeBits: b32cbits,
-	keyString: 'ABCDEFGHIJKLMNOPQRSTUVWXYZ123456789',
-	pad: '',
-	arrayData: true
-});
-
-var ProxyOwner = "." + options.dnsname;
 
 var Services = {
-	s: {
-		host: 'localhost',
-		port: 1337
-	}
+        s: {
+                host: 'localhost',
+                port: 1337
+        }
 }
 
 
-var ConnectionPool = [];
+var Sessions = new dnt.SessionsHolder();
 
-var UseTcp = false;
-if (UseTcp) {
-	tcpserver = dns.createTCPServer();
-}
-
-function PrintInfo(VerbTxT) {
-	if (BeVerbose) {
-		var now = new Date();
-		console.error(now.getHours() + ':' + now.getMinutes() + ':' + now.getSeconds() + ' ' + VerbTxT);
-	}
-}
-
-var onMessage = function(request, response) {
+function onDnsRequest(request, response) {
 	var i;
 
-	PrintInfo("# Got query from: " + request._socket._remote.address + " with: " + request.question.length + " question(s)")
+	//PrintInfo("# Got query from: " + request._socket._remote.address + " with: " + request.question.length + " question(s)")
 
 	//A UDP dns answerpacket may not exced 512 bytes
 	var RemaningChars = 500; //512-12 The static part of a dns response is 12 bytes
@@ -103,24 +70,67 @@ var onMessage = function(request, response) {
 	}
 	//Do this once per dns question
 	for (x in request.question) {
-
+        
 		//A question to one of the services that we support should look somthing
-		//like: base32data.base32data.MetaData.PacketData.serviceID.dnsproxy.example.com
+		//like: base32NUMdata base32data.dnsproxy.example.com
 		var QuestionName = request.question[x].name;
-		var IsToUs = QuestionName.lastIndexOf(ProxyOwner);
+console.error(QuestionName);
 
 		//Does the question end with our Special Domain Example: dnsproxy.example.com
-		if (IsToUs != -1 && IsToUs == (QuestionName.length - ProxyOwner.length)) {
+		if (QuestionName.substr(QuestionName.length - options.dnsname.length) == options.dnsname) {
+            var RecivedPacket = new dnt.ClientPacket(QuestionName.substr(0, QuestionName.length - options.dnsname.length).split('.').join(''));
+            
+            if(RecivedPacket){
+                var SubmitPacket = new dnt.ServerPacket();
+                var Session = Sessions.get(RecivedPacket.sessionID);
+                switch(RecivedPacket.commando){
+                    case 1://Data recive & recive
+                    case 3://Data retrive
+                        if(!Session){
+			                PrintInfo("Recived unknown SessionID: "+RecivedPacket.sessionID);
+                            SubmitPacket.commando = 5;
+                            SubmitPacket.data = new Buffer("1");
+                        }else{
+                            SubmitPacket.commando = 1;
+                            Session.AddData(RecivedPacket.offset, RecivedPacket.data);
+                            SubmitPacket.data = Session.Read(100);
+                            //PrintInfo("Got Data from session: "+RecivedPacket.sessionID+" Data: "+RecivedPacket.data);
+                        }
+                        break;
+                    case 2://New Session
+                        var Service = RecivedPacket.data.toString();
+                        if(typeof(Services[Service]) != 'undefined'){
+                            var SessionID = Sessions.add(Services[Service].host, Services[Service].port);
+                            SubmitPacket.commando = 2;
+                            SubmitPacket.data = new Buffer(SessionID.toString());
+			                PrintInfo("Gave new SessionID to Client: " + SessionID.toString());
+                        }else{
+                            SubmitPacket.commando = 5;
+                            SubmitPacket.data = new Buffer("3");
+			                PrintInfo("Client asked for a unknown service: " + Services[Service]);
+                        }
+                        break;
+                    case 5://Error
+			            PrintInfo("Client reported error: "+RecivedPacket.data.toString());
+                        break;
+                    default:
+			            PrintInfo("Unknown comamndo recived from client.");
+                        SubmitPacket.commando = 5;
+                        SubmitPacket.data = new Buffer("2");
+                        break;
+                }
 
-			//Split the question in to its subdomains
-			var DataDomains = QuestionName.substr(0, IsToUs).split('.');
-
-
-
-			RemaningChars = HandleQuestionToUs(DataDomains, response.question[x], request.question[x], response.answer, RemaningChars);
-
+				response.answer.push(dns.TXT({
+					name: request.question[x].name,
+					data: SubmitPacket.GetBinData(),
+					ttl: 1
+				}));
+                
+            }else{
+			    PrintInfo("The question does not have the correct number of heders");
+            }
 		} else {
-			PrintInfo("Question not for us:", request.question[x].name);
+			PrintInfo("Question not for us:"+ request.question[x].name);
 			/*
   		response.answer.push(dns.TXT({
     		name: "Unknown.main.domain",
@@ -135,11 +145,18 @@ var onMessage = function(request, response) {
 	//response.question = [ { name: ProxyOwner, type: 16, class: 1 } ];
 	//console.error('Submit Response');
 	response.send();
-	PrintInfo("__________________________________________")
+	//PrintInfo("__________________________________________")
 };
 
+function PrintInfo(VerbTxT) {
+	if (options.verbose) {
+		var now = new Date();
+		console.error(now.getHours() + ':' + now.getMinutes() + ':' + now.getSeconds() + ' ' + VerbTxT);
+	}
+}
+
 var onError = function(err, buff, req, res) {
-	console.error('ERROR:', err.stack);
+	console.error('DNS ERROR:', err);
 };
 
 var onListening = function() {
@@ -155,7 +172,7 @@ var onClose = function() {
 	PrintInfo('server closed', this.address());
 };
 
-server.on('request', onMessage);
+server.on('request', onDnsRequest);
 server.on('error', onError);
 server.on('listening', onListening);
 server.on('socketError', onSocketError);
@@ -163,15 +180,6 @@ server.on('close', onClose);
 
 server.serve(options.port, options.listenip);
 
-if (UseTcp) {
-	tcpserver.on('request', onMessage);
-	tcpserver.on('error', onError);
-	tcpserver.on('listening', onListening);
-	tcpserver.on('socketError', onSocketError);
-	tcpserver.on('close', onClose);
-
-	tcpserver.serve(options.port, options.listenip);
-}
 
 function CreateNewSession(cPoolId, ServiceID) {
 	//we can send about 300 bytes of pure data per Question
@@ -188,31 +196,10 @@ function CreateNewSession(cPoolId, ServiceID) {
 		'PrevAnswers': [],
         'timeout':null
 	};
-	ConnectionPool[cPoolId].socket = net.connect(Services[ServiceID].port, Services[ServiceID].host, function() {
-			PrintInfo(cPoolId + ' Connected to Service server with ServiceID: ' + ConnectionPool[cPoolId].ServiceID);
-	});
 
     ConnectionPool[cPoolId].timout = setTimeout(ConnectionPool[cPoolId].socket.close, options.timeout);
 
-	ConnectionPool[cPoolId].socket.on('data', function(d) {
-		PrintInfo(cPoolId + ' Got packet with ' + d.length + ' bytes from Service server with ServiceID: ' + ConnectionPool[cPoolId].ServiceID);
-		ConnectionPool[cPoolId].data = Buffer.concat([ConnectionPool[cPoolId].data, d]);
-		//ConnectionPool[cPoolId].datalen.push(d.length);
-		//ConnectionPool[cPoolId].data.push(d);
-		//
-		if (ConnectionPool[cPoolId].Data2ClientPerQuestion < ConnectionPool[cPoolId].data.length) {
-			ConnectionPool[cPoolId].socket.pause();
-		}
-	});
 
-	ConnectionPool[cPoolId].socket.on('error', function(err) {
-		PrintInfo(cPoolId + " Got Error From Service server Connection");
-	});
-	ConnectionPool[cPoolId].socket.on('close', function() {
-		PrintInfo(cPoolId + ' Service server with ServiceID: ' + ConnectionPool[cPoolId].ServiceID + '  disconnected');
-        clearTimeout(ConnectionPool[cPoolId].timout);
-        delete ConnectionPool[cPoolId];
-	});
 }
 
 function HandleClientData(cPoolId, DataDomains, PacketData) {
