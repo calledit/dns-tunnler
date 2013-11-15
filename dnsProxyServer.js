@@ -91,11 +91,17 @@ function onDnsRequest(request, response) {
                             SubmitPacket.data = new Buffer("1");
                         }else{
                             SubmitPacket.commando = 1;
-                            Session.AddData(RecivedPacket.offset, RecivedPacket.data);
+                            if(RecivedPacket.data != 0){
+                                PrintInfo("Session: "+RecivedPacket.sessionID+": <- "+RecivedPacket.data.length)
+                                Session.AddData(RecivedPacket.offset, RecivedPacket.data);
+                            }
                             SubmitPacket.offset = Session.NextReadByte;
-                            SubmitPacket.data = Session.Read(100);
+                            SubmitPacket.recivedoffset = Session.NextByte;
+                            SubmitPacket.data = Session.Read(100, RecivedPacket.recivedoffset);
                             if(SubmitPacket.data.length == 0){
                                 SubmitPacket.commando = 3;
+                            }else{
+                                PrintInfo("Session: "+RecivedPacket.sessionID+": -> "+SubmitPacket.data.length+": "+RecivedPacket.recivedoffset)
                             }
                         }
                         break;

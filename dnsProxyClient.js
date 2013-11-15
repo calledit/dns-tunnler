@@ -150,7 +150,7 @@ function MainLoop(){
         var Packet2Server = new dnt.ClientPacket();
         Packet2Server.sessionID = SessionID;
         Packet2Server.offset = SubmitedBytes_Len;
-        Packet2Server.recivedoffset = 0;
+        Packet2Server.recivedoffset = NextByte_Len;
         Packet2Server.commando = 3;
         if(DataFromUser_Arr.length != 0){
             Data2Send = DataFromUser_Arr.shift();
@@ -198,7 +198,7 @@ function DnsLookup(DnsName_Str){
         for(answerID in response.answer){
             var RecivedPacket = new dnt.ServerPacket(response.answer[answerID].data);
             switch(RecivedPacket.commando){
-                case 2:
+                case 2://New Session
                     if(SessionID === false){
                         SessionID = parseInt(RecivedPacket.data.toString());
                     }else{
@@ -217,11 +217,13 @@ function DnsLookup(DnsName_Str){
                     }
         
                     break;
-                case 5://New Session
+                case 5://Server error
 			        console.error("Server reported error: "+RecivedPacket.data.toString());
+                    process.exit();
                     break;
                 default:
                     console.error("Unknown commando: "+RecivedPacket.commando);
+                    process.exit();
                     break;
             }
         }

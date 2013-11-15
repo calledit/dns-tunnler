@@ -100,13 +100,11 @@ module.exports.Session = function(host, port){
         var EndByte;
         if(typeof(offset) == 'undefined'){
             offset = self.NextReadByte;
-            EndByte = Math.min(self.data.length, offset+length);
-            self.NextReadByte = EndByte;
-		    if (self.DataPerRequest + self.NextReadByte > self.data.length) {
-			    self.socket.resume();
-		    }
-        }else{
-            EndByte = Math.min(self.data.length, offset+length);
+        }
+        EndByte = Math.min(self.data.length, offset+length);
+        self.NextReadByte = Math.max(EndByte, self.NextReadByte);
+        if (self.DataPerRequest + self.NextReadByte > self.data.length) {
+            self.socket.resume();
         }
         return(self.data.slice(offset, EndByte));
     }
