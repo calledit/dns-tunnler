@@ -61,12 +61,12 @@ var Sessions = new dnt.SessionsHolder();
 function onDnsRequest(request, response) {
 	var i;
 
-	//PrintInfo("# Got query from: " + request._socket._remote.address + " with: " + request.question.length + " question(s)")
+	PrintInfo("# Got query from: " + request._socket._remote.address)
 
 	//A UDP dns answerpacket may not exced 512 bytes
-	var RemaningChars = 500; //512-12 The static part of a dns response is 12 bytes
+	var BytesLeft = 500; //512-12 The static part of a dns response is 12 bytes
 	for (qt in response.question) {
-		RemaningChars -= response.question[qt].name.length + 8;
+		BytesLeft  -= response.question[qt].name.length + 8;
 	}
 	//Do this once per dns question
 	for (x in request.question) {
@@ -80,33 +80,68 @@ function onDnsRequest(request, response) {
             var RecivedPacket = new dnt.ClientPacket(QuestionName.substr(0, QuestionName.length - options.dnsname.length));
             
             if(RecivedPacket){
-                var SubmitPacket = new dnt.ServerPacket();
                 var Session = Sessions.get(RecivedPacket.sessionID);
                 switch(RecivedPacket.commando){
                     case 1://Data recive & recive
                     case 3://Data retrive
                         if(!Session){
 			                PrintInfo("Recived unknown SessionID: "+RecivedPacket.sessionID);
+                            var SubmitPacket = new dnt.ServerPacket();
                             SubmitPacket.commando = 5;
                             SubmitPacket.data = new Buffer("1");
+				            response.answer.push(dns.TXT({
+					            name: request.question[x].name,
+					            data: SubmitPacket.GetBinData(),
+					            ttl: 1
+				            }));
                         }else{
-                            SubmitPacket.commando = 1;
                             if(RecivedPacket.data != 0){
-                                PrintInfo("Session: "+RecivedPacket.sessionID+": <- "+RecivedPacket.data.length)
+                                PrintInfo("FrClient["+RecivedPacket.offset+":"+RecivedPacket.data.length+"] <- (client: "+RecivedPacket.sessionID+")")
                                 Session.AddData(RecivedPacket.offset, RecivedPacket.data);
                             }
-                            SubmitPacket.offset = Session.NextReadByte;
-                            SubmitPacket.recivedoffset = Session.NextByte;
-                            SubmitPacket.data = Session.Read(100, RecivedPacket.recivedoffset);
-                            if(SubmitPacket.data.length == 0){
-                                SubmitPacket.commando = 3;
-                            }else{
-                                PrintInfo("Session: "+RecivedPacket.sessionID+": -> "+SubmitPacket.data.length+": "+RecivedPacket.recivedoffset)
+                            
+                            var RequestedOffset = RecivedPacket.recivedoffset;
+                            while(true){
+                                var SubmitPacket = new dnt.ServerPacket();
+                                SubmitPacket.commando = 1;
+                                SubmitPacket.offset = RequestedOffset;
+                                SubmitPacket.recivedoffset = Session.NextByte;
+                                var TxtDatLeft = BytesLeft - 13;
+                                var MaxDatLeft = Math.min(TxtDatLeft, 255);
+                                var UsableTxDatBytesLeft = MaxDatLeft - SubmitPacket.HeaderLen;
+                                var MaxData2Client_Len = Math.floor(UsableTxDatBytesLeft*(dnt.b32cbits/8));///A Anser may maximumly be 254 bytes
+                                if(MaxData2Client_Len > 0){
+                                    SubmitPacket.data = Session.Read(MaxData2Client_Len, SubmitPacket.offset);
+                                    RequestedOffset += SubmitPacket.data.length;
+                                }
+                                
+                                if(SubmitPacket.data.length == 0){
+                                    if(response.answer.length == 0){
+                                        SubmitPacket.commando = 3;
+                                        response.answer.push(dns.TXT({
+                                            name: request.question[x].name,
+                                            data: SubmitPacket.GetBinData(),
+                                            ttl: 1
+                                        }));
+                                    }
+                                    break;
+                                }else{
+                                    PrintInfo("ToClient["+SubmitPacket.offset+":"+SubmitPacket.data.length+"] -> (client: "+RecivedPacket.sessionID+")")
+                                    var TxData = SubmitPacket.GetBinData();
+                                    response.answer.push(dns.TXT({
+                                        name: request.question[x].name,
+                                        data: TxData,
+                                        ttl: 1
+                                    }));
+                                    //console.error("BytesLeft", BytesLeft ,"TxData", TxData.length)
+                                    BytesLeft -= 13 + TxData.length;
+                                }
                             }
                         }
                         break;
                     case 2://New Session
                         var Service = RecivedPacket.data.toString();
+                        var SubmitPacket = new dnt.ServerPacket();
                         if(typeof(Services[Service]) != 'undefined'){
                             var SessionID = Sessions.add(Services[Service].host, Services[Service].port);
                             SubmitPacket.commando = 2;
@@ -117,22 +152,28 @@ function onDnsRequest(request, response) {
                             SubmitPacket.data = new Buffer("3");
 			                PrintInfo("Client asked for a unknown service: " + Services[Service]);
                         }
+				        response.answer.push(dns.TXT({
+					        name: request.question[x].name,
+					        data: SubmitPacket.GetBinData(),
+					        ttl: 1
+				        }));
                         break;
                     case 5://Error
 			            PrintInfo("Client reported error: "+RecivedPacket.data.toString());
                         break;
                     default:
 			            PrintInfo("Unknown comamndo recived from client.");
+                        var SubmitPacket = new dnt.ServerPacket();
                         SubmitPacket.commando = 5;
                         SubmitPacket.data = new Buffer("2");
+                        
+				        response.answer.push(dns.TXT({
+					        name: request.question[x].name,
+					        data: SubmitPacket.GetBinData(),
+					        ttl: 1
+				        }));
                         break;
                 }
-
-				response.answer.push(dns.TXT({
-					name: request.question[x].name,
-					data: SubmitPacket.GetBinData(),
-					ttl: 1
-				}));
                 
             }else{
 			    PrintInfo("The question does not have the correct number of heders");

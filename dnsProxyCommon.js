@@ -21,6 +21,7 @@ module.exports.Numbase32 = new Nibbler({
 module.exports.ServerPacket = function(BinData){
     var self = this;
     self.crc = null;
+    self.HeaderLen = 16;
     self.offset = null;
     self.recivedoffset = null;
     self.commando = null;
@@ -33,21 +34,22 @@ module.exports.ServerPacket = function(BinData){
         
     }
     if (typeof(BinData) != 'undefined') {
-        if(BinData.length < 16){
+        if(BinData.length < self.HeaderLen){
             return(false);//Not a full header
         }
-        var Headers = module.exports.Numbase32.decode(BinData.substr(0, 16));
+        var Headers = module.exports.Numbase32.decode(BinData.substr(0, self.HeaderLen));
         self.crc = Headers[0];
         self.offset = Headers[1];
         self.recivedoffset = Headers[2];
         self.commando = Headers[3];
-        self.data = new Buffer(module.exports.base32.decode(BinData.substr(16)));
+        self.data = new Buffer(module.exports.base32.decode(BinData.substr(self.HeaderLen)));
     }
 }
 
 module.exports.ClientPacket = function(BinData){
     var self = this;
     self.crc = null;
+    self.HeaderLen = 20;
     self.sessionID = null;
     self.offset = null;
     self.recivedoffset = null;
@@ -68,17 +70,17 @@ module.exports.ClientPacket = function(BinData){
         return(ODat.join('.'));
     }
     if (typeof(BinData) != 'undefined') {
-        if(BinData.length < 20){
+        if(BinData.length < self.HeaderLen){
             return(false);//Not a full header
         }
         BinData = BinData.split('.').join('');
-        var Headers = module.exports.Numbase32.decode(BinData.substr(0, 20));
+        var Headers = module.exports.Numbase32.decode(BinData.substr(0, self.HeaderLen));
         self.crc = Headers[0];
         self.sessionID = Headers[1];
         self.offset = Headers[2];
         self.recivedoffset = Headers[3];
         self.commando = Headers[4];
-        self.data = new Buffer(module.exports.base32.decode(BinData.substr(20)));
+        self.data = new Buffer(module.exports.base32.decode(BinData.substr(self.HeaderLen)));
     }
 }
 
@@ -103,7 +105,7 @@ module.exports.Session = function(host, port){
         }
         EndByte = Math.min(self.data.length, offset+length);
         self.NextReadByte = Math.max(EndByte, self.NextReadByte);
-        if (self.DataPerRequest + self.NextReadByte > self.data.length) {
+        if (self.NextReadByte >= self.data.length) {
             self.socket.resume();
         }
         return(self.data.slice(offset, EndByte));
