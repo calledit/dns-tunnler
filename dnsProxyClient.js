@@ -35,13 +35,6 @@ var argDescr = {
         pharse: parseInt,
 		description: 'How often to normaly do dns requests in ms. 500 is default'
 	},
-	'mintiming': {
-		key: 'ti',
-		args: 1,
-        default: 50,
-        pharse: parseInt,
-		description: 'Never send request faster than this(to lessen strain on resolvers) in ms. 50 is default'
-	},
 	'maxtiming': {
 		key: 'ta',
 		args: 1,
@@ -105,6 +98,7 @@ var MaxDNSNameRawData_Len = Math.floor(MaxDNSNameData_Len * (dnt.b32cbits / 8));
 var SessionID = false;
 var SubmitedBytes_Len = 0;
 var NextByte_Len = 0;
+var Time2NextRequest = options.timing;
 
 var DataFromUser_Arr = [];
 var DataFromServer_Arr = [];
@@ -112,6 +106,7 @@ var DataFromServer_Arr = [];
 
 //Save All Data from STDIN TO DataFromUser_Arr
 process.stdin.on('data', function(UserData_Buf) {
+    Time2NextRequest = options.timing
     var SavedData_Len = 0;
     if(DataFromUser_Arr.length != 0){
         if(DataFromUser_Arr[DataFromUser_Arr.length-1].length < MaxDNSNameRawData_Len){//If the last one is not filed up
@@ -165,6 +160,8 @@ function MainLoop(){
         DnsLookup(Packet2Server.GetBinData()+"."+options.dnsname)
     }
     NextDNSRequest_TimeOut = setTimeout(MainLoop, options.timing);
+    Time2NextRequest += options.throttle;
+    Time2NextRequest = Math.min(options.maxtiming, Time2NextRequest);
 }
 
 
@@ -219,8 +216,10 @@ function DnsLookup(DnsName_Str){
                         if(NextByte_Len == datOffset){
                             NextByte_Len += DataFromServer_Arr[datOffset].length;
                             process.stdout.write(DataFromServer_Arr[datOffset]);
+                            delete DataFromServer_Arr[datOffset];
                         }
                     }
+                    Time2NextRequest = options.timing
         
                     break;
                 case 5://Server error
