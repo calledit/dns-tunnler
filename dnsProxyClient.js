@@ -97,6 +97,7 @@ var MaxDNSNameRawData_Len = Math.floor(MaxDNSNameData_Len * (dnt.b32cbits / 8));
 //Create A random Number that will be the Id of our session
 var SessionID = false;
 var SubmitedBytes_Len = 0;
+var BufferdBytes_Len = 0;
 var NextByte_Len = 0;
 var Time2NextRequest = options.timing;
 
@@ -109,15 +110,19 @@ process.stdin.on('data', function(UserData_Buf) {
     Time2NextRequest = options.timing
     var SavedData_Len = 0;
     if(DataFromUser_Arr.length != 0){
-        if(DataFromUser_Arr[DataFromUser_Arr.length-1].length < MaxDNSNameRawData_Len){//If the last one is not filed up
-            var MissingData_Len = MaxDNSNameRawData_Len - DataFromUser_Arr[DataFromUser_Arr.length-1].length;
-            SavedData_Len = Math.min(MissingData_Len, DataFromUser_Arr[DataFromUser_Arr.length-1].length);
-            DataFromUser_Arr[DataFromUser_Arr.length-1] = Buffer.concat([DataFromUser_Arr[DataFromUser_Arr.length-1], UserData_Buf.slice(0, SavedData_Len)]);
+        var LastBuffer = DataFromUser_Arr.pop();
+        if(LastBuffer.length < MaxDNSNameRawData_Len){//If the last one is not filed up
+            var MissingData_Len = MaxDNSNameRawData_Len - LastBuffer.length;
+            SavedData_Len = Math.min(MissingData_Len, LastBuffer.length);
+            BufferdBytes_Len += SavedData_Len;
+            LastBuffer = Buffer.concat([LastBuffer, UserData_Buf.slice(0, SavedData_Len)]);
         }
+        DataFromUser_Arr.push(LastBuffer);
     }
     
     while(SavedData_Len < UserData_Buf.length){
         var BytesToShave = Math.min(MaxDNSNameRawData_Len, UserData_Buf.length - SavedData_Len);
+        BufferdBytes_Len += BytesToShave;
         DataFromUser_Arr.push(UserData_Buf.slice(SavedData_Len, SavedData_Len + BytesToShave));
         SavedData_Len += BytesToShave;
     }

@@ -143,6 +143,7 @@ module.exports.Session = function(host, port){
             if(self.NextByte == datOffset){
                 self.NextByte += self.unsentData[datOffset].length;
                 self.socket.write(self.unsentData[datOffset]);
+                delete self.unsentData[datOffset];
             }
         }
         
