@@ -144,7 +144,10 @@ Packet2Server.commando = 2;
 Packet2Server.data = new Buffer(options.service);
 DnsLookup(Packet2Server.GetBinData()+"."+options.dnsname)
 
-function MainLoop(SingleShot){
+function MainLoop(){
+    
+    clearTimeout(NextDNSRequest_TimeOut);
+    
     //Only Conntact The server after we have acured a SessionID
     if(SessionID !== false){
         var Packet2Server = new dnt.ClientPacket();
@@ -161,9 +164,7 @@ function MainLoop(SingleShot){
         } 
         DnsLookup(Packet2Server.GetBinData()+"."+options.dnsname)
     }
-    if(!SingleShot){
-        NextDNSRequest_TimeOut = setTimeout(MainLoop, options.timing);
-    }
+    NextDNSRequest_TimeOut = setTimeout(MainLoop, options.timing);
 }
 
 
@@ -234,7 +235,7 @@ function DnsLookup(DnsName_Str){
         }
         if(LastCommandType == 4){
             //There is more Bytes on server, do new query 
-            MainLoop(true);
+            MainLoop();
         }
     });
 	req.send();
