@@ -111,6 +111,11 @@ function onDnsRequest(request, response) {
                                 var MaxData2Client_Len = Math.floor(UsableTxDatBytesLeft*(dnt.b32cbits/8));///A Anser may maximumly be 254 bytes
                                 if(MaxData2Client_Len > 0){
                                     SubmitPacket.data = Session.Read(MaxData2Client_Len, SubmitPacket.offset);
+                                    
+                                    if(Session.IsThereUnReadBytes()){
+                                        SubmitPacket.commando = 4;
+                                    }
+                                    //console.error("Read bytes: ", Session.GetLastReadByte()," Client Recived: ", RecivedPacket.recivedoffset);
                                     RequestedOffset += SubmitPacket.data.length;
                                 }
                                 

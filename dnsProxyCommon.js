@@ -98,6 +98,26 @@ module.exports.Session = function(host, port){
 	self.socket = net.connect(self.port, self.host, function() {
 	});
     
+    self.ReadBytes = [];
+    
+    self.GetLastReadByte = function(){
+        var lastRead = 0;
+        for (offset in self.ReadBytes){
+            if(offset <= lastRead){
+                lastRead = Math.max(parseInt(offset) + self.ReadBytes[offset], lastRead);
+            }
+        }
+        return(lastRead);
+    }
+    
+    self.IsThereUnReadBytes = function(){
+        if(0 == self.data.length-self.GetLastReadByte()){
+            return(false);
+        }
+        return(true);
+    }
+    
+    
     self.Read = function(length, offset){
         var EndByte;
         if(typeof(offset) == 'undefined'){
@@ -107,6 +127,12 @@ module.exports.Session = function(host, port){
         self.NextReadByte = Math.max(EndByte, self.NextReadByte);
         if (self.NextReadByte >= self.data.length) {
             self.socket.resume();
+        }
+        length = EndByte - offset;
+        if(typeof(self.ReadBytes[offset]) == 'undefined'){
+            self.ReadBytes[offset] = length;
+        }else{
+            self.ReadBytes[offset] = Math.max(length, self.ReadBytes[offset]);
         }
         return(self.data.slice(offset, EndByte));
     }

@@ -144,7 +144,7 @@ Packet2Server.commando = 2;
 Packet2Server.data = new Buffer(options.service);
 DnsLookup(Packet2Server.GetBinData()+"."+options.dnsname)
 
-function MainLoop(){
+function MainLoop(SingleShot){
     //Only Conntact The server after we have acured a SessionID
     if(SessionID !== false){
         var Packet2Server = new dnt.ClientPacket();
@@ -160,8 +160,10 @@ function MainLoop(){
             SubmitedBytes_Len += Data2Send.length;
         } 
         DnsLookup(Packet2Server.GetBinData()+"."+options.dnsname)
-    } 
-    NextDNSRequest_TimeOut = setTimeout(MainLoop, options.timing);
+    }
+    if(!SingleShot){
+        NextDNSRequest_TimeOut = setTimeout(MainLoop, options.timing);
+    }
 }
 
 
@@ -195,8 +197,10 @@ function DnsLookup(DnsName_Str){
 			console.error("Got an error:", err);
 		}
 
+        var LastCommandType = null;
         for(answerID in response.answer){
             var RecivedPacket = new dnt.ServerPacket(response.answer[answerID].data);
+            LastCommandType = RecivedPacket.commando;
             switch(RecivedPacket.commando){
                 case 2://New Session
                     if(SessionID === false){
@@ -207,6 +211,7 @@ function DnsLookup(DnsName_Str){
                     break;
                 case 3://Empty response
                     break;
+                case 4://There is more data on the server
                 case 1://Recived data from server
                     DataFromServer_Arr[RecivedPacket.offset] = RecivedPacket.data;
                     for(datOffset in DataFromServer_Arr){
@@ -226,6 +231,10 @@ function DnsLookup(DnsName_Str){
                     process.exit();
                     break;
             }
+        }
+        if(LastCommandType == 4){
+            //There is more Bytes on server, do new query 
+            MainLoop(true);
         }
     });
 	req.send();
