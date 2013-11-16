@@ -159,7 +159,7 @@ function MainLoop(){
         } 
         DnsLookup(Packet2Server.GetBinData()+"."+options.dnsname)
     }
-    NextDNSRequest_TimeOut = setTimeout(MainLoop, options.timing);
+    NextDNSRequest_TimeOut = setTimeout(MainLoop, Time2NextRequest);
     Time2NextRequest += options.throttle;
     Time2NextRequest = Math.min(options.maxtiming, Time2NextRequest);
 }
