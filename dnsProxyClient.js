@@ -96,7 +96,7 @@ var MaxDNSNameRawData_Len = Math.floor(MaxDNSNameData_Len * (dnt.b32cbits / 8));
 
 //Create A random Number that will be the Id of our session
 var SessionID = false;
-var SubmitedBytes_Len = 0;
+var Server_Recived_Bytes_Len = 0;
 var BufferdBytes_Len = 0;
 var NextByte_Len = 0;
 var Time2NextRequest = options.timing;
@@ -109,21 +109,11 @@ var DataFromServer_Arr = [];
 process.stdin.on('data', function(UserData_Buf) {
     Time2NextRequest = options.timing
     var SavedData_Len = 0;
-    if(DataFromUser_Arr.length != 0){
-        var LastBuffer = DataFromUser_Arr.pop();
-        if(LastBuffer.length < MaxDNSNameRawData_Len){//If the last one is not filed up
-            var MissingData_Len = MaxDNSNameRawData_Len - LastBuffer.length;
-            SavedData_Len = Math.min(MissingData_Len, LastBuffer.length);
-            BufferdBytes_Len += SavedData_Len;
-            LastBuffer = Buffer.concat([LastBuffer, UserData_Buf.slice(0, SavedData_Len)]);
-        }
-        DataFromUser_Arr.push(LastBuffer);
-    }
-    
+    //Split up the data so that all parts can fit in one dns question
     while(SavedData_Len < UserData_Buf.length){
         var BytesToShave = Math.min(MaxDNSNameRawData_Len, UserData_Buf.length - SavedData_Len);
+        DataFromUser_Arr[BufferdBytes_Len] = UserData_Buf.slice(SavedData_Len, SavedData_Len + BytesToShave);
         BufferdBytes_Len += BytesToShave;
-        DataFromUser_Arr.push(UserData_Buf.slice(SavedData_Len, SavedData_Len + BytesToShave));
         SavedData_Len += BytesToShave;
     }
 });
@@ -152,15 +142,23 @@ function MainLoop(){
     if(SessionID !== false){
         var Packet2Server = new dnt.ClientPacket();
         Packet2Server.sessionID = SessionID;
-        Packet2Server.offset = SubmitedBytes_Len;
+        Packet2Server.offset = Server_Recived_Bytes_Len;
         Packet2Server.recivedoffset = NextByte_Len;
         Packet2Server.commando = 3;
-        if(DataFromUser_Arr.length != 0){
-            Data2Send = DataFromUser_Arr.shift();
+        
+        //If the requested data exists
+        if(typeof(DataFromUser_Arr[Server_Recived_Bytes_Len]) != 'undefined'){
+            var Data2Send = DataFromUser_Arr[Server_Recived_Bytes_Len];
+            //Concat as mush data as posible
+            while(typeof(DataFromUser_Arr[Server_Recived_Bytes_Len+Data2Send.length]) != 'undefined'){
+                if(Data2Send.length + DataFromUser_Arr[Server_Recived_Bytes_Len+Data2Send.length].length > MaxDNSNameRawData_Len){
+                    break;
+                }
+                Data2Send = Buffer.concat([Data2Send, DataFromUser_Arr[Server_Recived_Bytes_Len+Data2Send.length]]);
+            }
             Packet2Server.commando = 1;
             Packet2Server.data = Data2Send;
 
-            SubmitedBytes_Len += Data2Send.length;
         } 
         DnsLookup(Packet2Server.GetBinData()+"."+options.dnsname)
     }
@@ -204,6 +202,7 @@ function DnsLookup(DnsName_Str){
         for(answerID in response.answer){
             var RecivedPacket = new dnt.ServerPacket(response.answer[answerID].data);
             LastCommandType = RecivedPacket.commando;
+            Server_Recived_Bytes_Len = RecivedPacket.recivedoffset;
             switch(RecivedPacket.commando){
                 case 2://New Session
                     if(SessionID === false){
