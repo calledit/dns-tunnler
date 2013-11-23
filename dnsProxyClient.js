@@ -132,7 +132,7 @@ var NextDNSRequest_TimeOut = setTimeout(MainLoop, 1);
 var Packet2Server = new dnt.ClientPacket();
 Packet2Server.commando = 2;
 Packet2Server.data = new Buffer(options.service);
-DnsLookup(Packet2Server.GetBinData()+"."+options.dnsname)
+DnsLookup(Packet2Server.GetBinData()+"."+options.dnsname, true)
 
 function MainLoop(){
     
@@ -168,8 +168,11 @@ function MainLoop(){
 }
 
 
-function DnsLookup(DnsName_Str){
-    
+function DnsLookup(DnsName_Str, Wital){
+    var ErrorOnTimeout = false;
+    if(Wital){
+        ErrorOnTimeout = true;
+    }
 	var req = dns.Request({
 		question: dns.Question({
             name: DnsName_Str,
@@ -187,6 +190,10 @@ function DnsLookup(DnsName_Str){
 
 	req.on('timeout', function() {
         console.error("timed out")
+        if(ErrorOnTimeout){
+            console.error("Message was wital closing down.");
+            process.exit();
+        }
 		//var redoname = this.question.name;
 		//setTimeout(function() {
 			//SubmitDnsRequest(redoname);
