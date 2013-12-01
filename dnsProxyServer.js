@@ -55,19 +55,27 @@ var Services = {
         }
 }
 
+packetID = 0;
 
 var Sessions = new dnt.SessionsHolder();
 
-function onDnsRequest(request, response) {
+function onDnsRequest(request, input_response) {
+    var response = input_response;
 	var i;
+    
+    packetID += 1;
 
-
+    var ThisPacketID = packetID;
+    
+    var ResonseDelayed = false;
+    
 	//A UDP dns answerpacket may not exced 512 bytes
 	var BytesLeft = 500; //512-12 The static part of a dns response is 12 bytes
 	for (qt in response.question) {
 		BytesLeft  -= response.question[qt].name.length + 8;
 	}
-	//Do this once per dns question
+	//Do this once per dns question There is a bug in this as the response will
+	//be sent once per question.
 	for (x in request.question) {
         
 		//A question to one of the services that we support should look somthing
@@ -80,6 +88,7 @@ function onDnsRequest(request, response) {
             
             if(RecivedPacket){
                 var Session = Sessions.get(RecivedPacket.sessionID);
+			    //PrintInfo("SessionID: "+RecivedPacket.sessionID+" RcOf: "+RecivedPacket.recivedoffset+" Of: "+RecivedPacket.offset+" DatLen: "+RecivedPacket.data.length);
                 switch(RecivedPacket.commando){
                     case 1://Data recive & recive
                     case 3://Data retrive
@@ -94,53 +103,63 @@ function onDnsRequest(request, response) {
 					            ttl: 1
 				            }));
                         }else{
+                            console.log("Packet: "+ThisPacketID)
                             if(RecivedPacket.data != 0){
-                                PrintInfo("FrClient["+RecivedPacket.offset+":"+RecivedPacket.data.length+"] <- (client: "+RecivedPacket.sessionID+")")
+                                PrintInfo("FrClient["+RecivedPacket.offset+":"+RecivedPacket.data.length+"] <- (client: "+RecivedPacket.sessionID+")"+ThisPacketID)
                                 Session.AddData(RecivedPacket.offset, RecivedPacket.data);
                             }
                             
                             var RequestedOffset = RecivedPacket.recivedoffset;
-                            while(true){
-                                var SubmitPacket = new dnt.ServerPacket();
-                                SubmitPacket.commando = 1;
-                                SubmitPacket.offset = RequestedOffset;
-                                SubmitPacket.recivedoffset = Session.NextByte;
-                                var TxtDatLeft = BytesLeft - 13;
-                                var MaxDatLeft = Math.min(TxtDatLeft, 255);
-                                var UsableTxDatBytesLeft = MaxDatLeft - SubmitPacket.HeaderLen;
-                                var MaxData2Client_Len = Math.floor(UsableTxDatBytesLeft*(dnt.b32cbits/8));///A Anser may maximumly be 254 bytes
-                                if(MaxData2Client_Len > 0){
-                                    SubmitPacket.data = Session.Read(MaxData2Client_Len, SubmitPacket.offset);
-                                    
-                                    if(Session.IsThereUnReadBytes()){
-                                        SubmitPacket.commando = 4;
+                            
+                            //We Wait 100ms that way we can get the response
+                            //from the server in the answer
+                            ResonseDelayed = true;
+                            setTimeout(function()
+                            {
+                                while(true)
+                                {
+                                    var SubmitPacket = new dnt.ServerPacket();
+                                    SubmitPacket.commando = 1;
+                                    SubmitPacket.offset = RequestedOffset;
+                                    SubmitPacket.recivedoffset = Session.NextByte;
+                                    var TxtDatLeft = BytesLeft - 13;
+                                    var MaxDatLeft = Math.min(TxtDatLeft, 255);
+                                    var UsableTxDatBytesLeft = MaxDatLeft - SubmitPacket.HeaderLen;
+                                    var MaxData2Client_Len = Math.floor(UsableTxDatBytesLeft*(dnt.b32cbits/8));///A Anser may maximumly be 254 bytes
+                                    if(MaxData2Client_Len > 0){
+                                        SubmitPacket.data = Session.Read(MaxData2Client_Len, SubmitPacket.offset);
+                                        
+                                        if(Session.IsThereUnReadBytes()){
+                                            SubmitPacket.commando = 4;
+                                        }
+                                        //console.error("Read bytes: ", Session.GetLastReadByte()," Client Recived: ", RecivedPacket.recivedoffset);
+                                        RequestedOffset += SubmitPacket.data.length;
                                     }
-                                    //console.error("Read bytes: ", Session.GetLastReadByte()," Client Recived: ", RecivedPacket.recivedoffset);
-                                    RequestedOffset += SubmitPacket.data.length;
-                                }
-                                
-                                if(SubmitPacket.data.length == 0){
-                                    if(response.answer.length == 0){
-                                        SubmitPacket.commando = 3;
+                                    
+                                    if(SubmitPacket.data.length == 0){
+                                        if(response.answer.length == 0){
+                                            SubmitPacket.commando = 3;
+                                            response.answer.push(dns.TXT({
+                                                name: request.question[x].name,
+                                                data: SubmitPacket.GetBinData(),
+                                                ttl: 1
+                                            }));
+                                        }
+                                        break;
+                                    }else{
+                                        PrintInfo("ToClient["+SubmitPacket.offset+":"+SubmitPacket.data.length+"] -> (client: "+RecivedPacket.sessionID+")"+ThisPacketID)
+                                        var TxData = SubmitPacket.GetBinData();
                                         response.answer.push(dns.TXT({
                                             name: request.question[x].name,
-                                            data: SubmitPacket.GetBinData(),
+                                            data: TxData,
                                             ttl: 1
                                         }));
+                                        //console.error("BytesLeft", BytesLeft ,"TxData", TxData.length)
+                                        BytesLeft -= 13 + TxData.length;
                                     }
-                                    break;
-                                }else{
-                                    PrintInfo("ToClient["+SubmitPacket.offset+":"+SubmitPacket.data.length+"] -> (client: "+RecivedPacket.sessionID+")")
-                                    var TxData = SubmitPacket.GetBinData();
-                                    response.answer.push(dns.TXT({
-                                        name: request.question[x].name,
-                                        data: TxData,
-                                        ttl: 1
-                                    }));
-                                    //console.error("BytesLeft", BytesLeft ,"TxData", TxData.length)
-                                    BytesLeft -= 13 + TxData.length;
                                 }
-                            }
+	                            response.send();
+                            },100);
                         }
                         break;
                     case 2://New Session
@@ -186,7 +205,9 @@ function onDnsRequest(request, response) {
 			PrintInfo("Question not for us:"+ request.question[x].name);
 		}
 	}
-	response.send();
+    if(!ResonseDelayed){
+	    response.send();
+    }
 };
 
 function PrintInfo(VerbTxT) {

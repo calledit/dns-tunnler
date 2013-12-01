@@ -35,6 +35,13 @@ var argDescr = {
         pharse: parseInt,
 		description: 'How often to normaly do dns requests in ms. 500 is default'
 	},
+	'pooltiming': {
+		key: 'p',
+		args: 1,
+        default: 5000,
+        pharse: parseInt,
+		description: 'How long the a poll may last. 5000 is default'
+	},
 	'maxtiming': {
 		key: 'ta',
 		args: 1,
@@ -185,7 +192,7 @@ function DnsLookup(DnsName_Str, Wital){
 			type: 'udp'
 		},
 		cache: false,
-		timeout: 7000
+		timeout: options.pooltiming+5000
 	});
 
 	req.on('timeout', function() {
