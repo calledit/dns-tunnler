@@ -16,18 +16,18 @@ npm install native-dns stdio
 Usage
 -----
 
-Direct your NS record towards you proxy server
-and run
+Setup a dns NS record (ex proxy.example.com) directed to your server (ex 123.123.123.123) 
+and on the server run
 ```bash
 nodejs dnsProxyServer.js -d proxy.example.com -p 53 -v
 ```
 I personaly recomend runing it on another port than 53 and redirecting with some
 iptables rules so that you dont have to run stuff as root.
 
-To connect to the proxy server from your client:
+When you want to connect to your server you run:
+
 ```bash
-ssh -D 1234 -C -o ProxyCommand="nodejs dnsProxyClient.js -p 53 -r ${Some_Dns_Server_That_You_Can_Reach} -d proxy.example.com -s s -t 700" user@example.com
+ssh -C -o ProxyCommand="nodejs dnsProxyClient.js -p 53 -r 8.8.8.8 -d proxy.example.com -s s -t 700" user@example.com
 ```
 
-Insperation from ozymandns (This is not compatible with the ozymandns tunnel)
-ozymandns took way to much cpu power on my laptop that was my main reason for building this.
+Replace proxy.example.com with your own dns name and you can replace 8.8.8.8 with any dns server you can reach.
