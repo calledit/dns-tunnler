@@ -138,7 +138,7 @@ var NextDNSRequest_TimeOut = setTimeout(MainLoop, 1);
 //Ask Server to start a new Session
 var Packet2Server = new dnt.ClientPacket();
 Packet2Server.commando = 2;
-Packet2Server.data = new Buffer(options.service);
+Packet2Server.data = Buffer.from(options.service);
 DnsLookup(Packet2Server.GetBinData()+"."+options.dnsname, true)
 
 function MainLoop(){

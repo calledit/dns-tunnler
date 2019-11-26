@@ -96,7 +96,7 @@ function onDnsRequest(request, input_response) {
 			                PrintInfo("Recived unknown SessionID: "+RecivedPacket.sessionID);
                             var SubmitPacket = new dnt.ServerPacket();
                             SubmitPacket.commando = 5;
-                            SubmitPacket.data = new Buffer("1");
+                            SubmitPacket.data = Buffer.from("1");
 				            response.answer.push(dns.TXT({
 					            name: request.question[x].name,
 					            data: SubmitPacket.GetBinData(),
@@ -168,11 +168,11 @@ function onDnsRequest(request, input_response) {
                         if(typeof(Services[Service]) != 'undefined'){
                             var SessionID = Sessions.add(Services[Service].host, Services[Service].port);
                             SubmitPacket.commando = 2;
-                            SubmitPacket.data = new Buffer(SessionID.toString());
+                            SubmitPacket.data = Buffer.from(SessionID.toString());
 			                PrintInfo("Gave new SessionID to Client: " + SessionID.toString());
                         }else{
                             SubmitPacket.commando = 5;
-                            SubmitPacket.data = new Buffer("3");
+                            SubmitPacket.data = Buffer.from("3");
 			                PrintInfo("Client asked for a unknown service: " + Services[Service]);
                         }
 				        response.answer.push(dns.TXT({
@@ -188,7 +188,7 @@ function onDnsRequest(request, input_response) {
 			            PrintInfo("Unknown comamndo recived from client.");
                         var SubmitPacket = new dnt.ServerPacket();
                         SubmitPacket.commando = 5;
-                        SubmitPacket.data = new Buffer("2");
+                        SubmitPacket.data = Buffer.from("2");
                         
 				        response.answer.push(dns.TXT({
 					        name: request.question[x].name,

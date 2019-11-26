@@ -25,7 +25,7 @@ module.exports.ServerPacket = function(BinData){
     self.offset = null;
     self.recivedoffset = null;
     self.commando = null;
-    self.data = new Buffer(0);
+    self.data = Buffer.alloc(0);
     self.GetBinData = function(){
         var CDat = module.exports.Numbase32.encode([self.offset, self.recivedoffset, self.commando]) + module.exports.base32.encode(self.data);
         self.crc = 45;
@@ -42,7 +42,7 @@ module.exports.ServerPacket = function(BinData){
         self.offset = Headers[1];
         self.recivedoffset = Headers[2];
         self.commando = Headers[3];
-        self.data = new Buffer(module.exports.base32.decode(BinData.substr(self.HeaderLen)));
+        self.data = Buffer.from(module.exports.base32.decode(BinData.substr(self.HeaderLen)));
     }
 }
 
@@ -54,7 +54,7 @@ module.exports.ClientPacket = function(BinData){
     self.offset = null;
     self.recivedoffset = null;
     self.commando = null;
-    self.data = new Buffer(0);
+    self.data = Buffer.alloc(0);
     self.GetBinData = function(){
         var CDat = module.exports.Numbase32.encode([self.sessionID, self.offset, self.recivedoffset, self.commando]) + module.exports.base32.encode(self.data);
         self.crc = 45;
@@ -80,7 +80,7 @@ module.exports.ClientPacket = function(BinData){
         self.offset = Headers[2];
         self.recivedoffset = Headers[3];
         self.commando = Headers[4];
-        self.data = new Buffer(module.exports.base32.decode(BinData.substr(self.HeaderLen)));
+        self.data = Buffer.from(module.exports.base32.decode(BinData.substr(self.HeaderLen)));
     }
 }
 
@@ -91,7 +91,7 @@ module.exports.Session = function(host, port){
     self.DataPerRequest = 300;
     self.host = host;
     self.port = port;
-    self.data = new Buffer(0);
+    self.data = Buffer.alloc(0);
     self.unsentData = [];
     self.NextByte = 0;
     self.NextReadByte = 0;
