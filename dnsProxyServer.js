@@ -108,7 +108,7 @@ function onDnsRequest(request, input_response) {
 							console.log("Packet: " + ThisPacketID)
 							var ResponseDelay = 0;
 							if (RecivedPacket.data != 0) {
-								PrintInfo("FrClient[" + RecivedPacket.offset + ":" + RecivedPacket.data.length + "] <- (client: " + RecivedPacket.sessionID + ")" + ThisPacketID)
+								PrintInfo("FrClient(" + RecivedPacket.commando + ")[" + RecivedPacket.offset + ":" + RecivedPacket.data.length + "] <- (client: " + RecivedPacket.sessionID + ")" + ThisPacketID)
 								ResponseDelay = 50;
 								Session.AddData(RecivedPacket.offset, RecivedPacket.data);
 							}
@@ -149,7 +149,7 @@ function onDnsRequest(request, input_response) {
 										}
 										break;
 									} else {
-										PrintInfo("ToClient[" + SubmitPacket.offset + ":" + SubmitPacket.data.length + "] -> (client: " + RecivedPacket.sessionID + ")" + ThisPacketID)
+										PrintInfo("ToClient(" + SubmitPacket.commando + ")[" + SubmitPacket.offset + ":" + SubmitPacket.data.length + "] -> (client: " + RecivedPacket.sessionID + ")" + ThisPacketID)
 										var TxData = SubmitPacket.GetBinData();
 										response.answer.push(dns.TXT({
 											name: request.question[x].name,
