@@ -1,0 +1,32 @@
+Protocol description:
+
+Packet format
+ServerPacket:
+A ServerPacket is a packet comming from the server -> client
+It contains:
+	offset: A offset number to the data starting at 0 when the connection is initiated.
+	recivedoffset: The last offset the clinet sent to the server. Used to determine if there has been packetloss.
+	commado: a number describing the purpose of the packet
+		1,3 & 4 are for sending and reciving data.
+		2 is for reciving a session id.
+		4 is the server saying there is more data to retrive on the server.
+		5 is used to indicate server error
+	data: where the data part of the packet is.
+
+ClientPacket
+A ClientPacket is a packet comming crom the client -> server
+It is very simmilar to the ServerPacket the main diffrenace is the sessionId.
+It contains:
+	sessionId: used to identify which client sent the message
+	offset: A offset number to the data starting at 0 when the connection is initiated.
+	recivedoffset: The last offset the server sent to the client. Used to determine if there has been packetloss.
+	commado: a number describing the purpose of the packet
+		1,3 & 4 are for sending and reciving data.
+		2 is for requesting a session id.
+		4 is the server saying there is more data to retrive on the server.
+		5 is used to indicate client error
+	data: where the data part of the packet is.
+
+As the client starts it will ask the server for a sessionId. For the rest of the session it will use the sessionId that it recived from the server to identify itself.
+
+When it has recived it's sessionId it will start to poll the server for data.
