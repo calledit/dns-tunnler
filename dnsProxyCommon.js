@@ -88,7 +88,7 @@ module.exports.ClientPacket = function(BinData) {
 module.exports.Session = function(host, port) {
 	var self = this;
 
-	self.DataPerRequest = 300;
+	self.DataPerRequest = 900;
 	self.host = host;
 	self.port = port;
 	self.data = Buffer.alloc(0);
@@ -157,7 +157,7 @@ module.exports.Session = function(host, port) {
 	self.socket.on('data', function(d) {
 		self.data = Buffer.concat([self.data, d]);
 		if (self.DataPerRequest + self.NextByte < self.data.length) {
-			self.socket.pause();
+			//self.socket.pause();
 		}
 	});
 
