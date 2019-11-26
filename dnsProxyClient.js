@@ -36,7 +36,7 @@ var argDescr = {
 		description: 'How often to normaly do dns requests in ms. 500 is default'
 	},
 	'pooltiming': {
-		key: 'p',
+		key: 'po',
 		args: 1,
         default: 5000,
         pharse: parseInt,
