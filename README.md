@@ -10,7 +10,7 @@ Install
 ```bash
 git clone https://github.com/callesg/dns-tunnler.git
 cd dns-tunnler
-npm install native-dns stdio
+npm install native-dns@0.4.1 stdio
 ```
 
 Usage
@@ -21,13 +21,21 @@ and on the server run
 ```bash
 nodejs dnsProxyServer.js -d proxy.example.com -p 53 -v
 ```
-I personaly recomend runing it on another port than 53 and redirecting with some
+I recomend runing it on another port than 53 and redirecting with some
 iptables rules so that you dont have to run stuff as root.
+
+example
+```iptables
+# External accept udp for external dns
+-A INPUT -i $EXTIF -m conntrack --ctstate NEW,ESTABLISHED,RELATED -p udp -s $UNIVERSE -d $EXTIP --dport 5453 -j ACCEPT
+#External dns redirect from port 53 to 5453
+-A PREROUTING -p udp -d $EXTIP --dport 53 -m conntrack --ctstate NEW,ESTABLISHED,RELATED -j REDIRECT --to-port 5453
+```
 
 When you want to connect to your server you run:
 
 ```bash
-ssh -C -o ProxyCommand="nodejs dnsProxyClient.js -p 53 -r 8.8.8.8 -d proxy.example.com -s s -t 700" user@example.com
+ssh -C -o ProxyCommand="node dnsProxyClient.js -p 53 -r 8.8.8.8 -d proxy.example.com -s s -t 700" user@example.com
 ```
 
 Replace proxy.example.com with your own dns name and you can replace 8.8.8.8 with any dns server you can reach.
