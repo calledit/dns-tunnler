@@ -106,15 +106,17 @@ function onDnsRequest(request, input_response) {
 							}));
 						} else {
 							console.log("Packet: " + ThisPacketID)
+							var ResponseDelay = 0;
 							if (RecivedPacket.data != 0) {
 								PrintInfo("FrClient[" + RecivedPacket.offset + ":" + RecivedPacket.data.length + "] <- (client: " + RecivedPacket.sessionID + ")" + ThisPacketID)
+								ResponseDelay = 50;
 								Session.AddData(RecivedPacket.offset, RecivedPacket.data);
 							}
 
 							var RequestedOffset = RecivedPacket.recivedoffset;
 
-							//We Wait 100ms that way we can get the response
-							//from the server in the answer
+							//We Wait {ResponseDelay}ms that way we can get the response
+							//from the server in the answer if there was no data from the client we use a ResponseDelay of zero
 							ResonseDelayed = true;
 							setTimeout(function() {
 								while (true) {
@@ -159,7 +161,7 @@ function onDnsRequest(request, input_response) {
 									}
 								}
 								response.send();
-							}, 100);
+							}, ResponseDelay);
 						}
 						break;
 					case 2: //New Session
