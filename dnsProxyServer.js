@@ -53,7 +53,7 @@ for (ArgName in argDescr) {
 var Services = {
 	s: {
 		host: 'localhost',
-		port: 1337
+		port: 22
 	}
 }
 
