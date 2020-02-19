@@ -18,6 +18,7 @@ module.exports.Numbase32 = new Nibbler({
 	arrayData: true
 });
 
+//The server packet is sent in a TXT record so could be encoded in base64 instead of 32
 module.exports.ServerPacket = function(BinData) {
 	var self = this;
 	self.crc = null;

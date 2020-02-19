@@ -50,6 +50,7 @@ for (ArgName in argDescr) {
 	}
 }
 
+//the system is built to support multiple targets the client can request a target based on the label in this struct
 var Services = {
 	s: {
 		host: 'localhost',
@@ -57,12 +58,15 @@ var Services = {
 	}
 }
 
+//packetID just used for debuging
 packetID = 0;
 
+//Sessions holds information about active sessions
 var Sessions = new dnt.SessionsHolder();
 
 function onDnsRequest(request, input_response) {
 
+	//If we get edns info populate it in the adress variable
 	adress = false;
 	//The edns data ussaly contains the subnet of the asker
 	for(x in request.edns_options){
@@ -88,19 +92,19 @@ function onDnsRequest(request, input_response) {
 	var response = input_response;
 	var i;
 
+	//packetID just used for debuging
 	packetID += 1;
-
 	var ThisPacketID = packetID;
 
 	var ResonseDelayed = false;
 
-	//A UDP dns answerpacket may not exced 512 bytes
+	//BytesLeft keeps track of the number of bytes used a UDP dns answerpacket may not exced 512 bytes
 	var BytesLeft = 500; //512-12 The static part of a dns response is 12 bytes
 	for (qt in response.question) {
 		BytesLeft -= response.question[qt].name.length + 8;
 	}
 	//Do this once per dns question There is a bug in this as the response will
-	//be sent once per question.
+	//be sent once per question. but the client only ever sends one question per message
 	for (x in request.question) {
 
 		//A question to one of the services that we support should look somthing
@@ -111,6 +115,7 @@ function onDnsRequest(request, input_response) {
 		if (QuestionName.substr(QuestionName.length - options.dnsname.length) == options.dnsname) {
 			var RecivedPacket = new dnt.ClientPacket(QuestionName.substr(0, QuestionName.length - options.dnsname.length));
 
+			//Was the message from the client decoded properly
 			if (RecivedPacket) {
 				var Session = Sessions.get(RecivedPacket.sessionID);
 				if(Session){
@@ -138,13 +143,13 @@ function onDnsRequest(request, input_response) {
 							var ResponseDelay = 0;
 							if (RecivedPacket.data != 0) {
 								PrintInfo("FrClient(" + RecivedPacket.commando + ")[" + RecivedPacket.offset + ":" + RecivedPacket.data.length + "] <- (client: " + RecivedPacket.sessionID + ")" + ThisPacketID)
-								ResponseDelay = 50;
+								ResponseDelay = 5;
 								Session.AddData(RecivedPacket.offset, RecivedPacket.data);
 							}
 
 							var RequestedOffset = RecivedPacket.recivedoffset;
 
-							//We Wait {ResponseDelay}ms that way we can get the response
+							//We Wait {ResponseDelay}ms that way we can get the response We should not wait if there is allready a full message in the que, add that feature later...
 							//from the server in the answer if there was no data from the client we use a ResponseDelay of zero
 							ResonseDelayed = true;
 							setTimeout(function() {

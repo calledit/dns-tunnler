@@ -4,6 +4,7 @@ Packet format
 ServerPacket:
 A ServerPacket is a packet comming from the server -> client
 It contains:
+	crc: a crc of the message The crc has not been implemented yeet. It is always set to 45
 	offset: A offset number to the data starting at 0 when the connection is initiated.
 	recivedoffset: The last offset the clinet sent to the server. Used to determine if there has been packetloss.
 	commado: a number describing the purpose of the packet
@@ -17,6 +18,7 @@ ClientPacket
 A ClientPacket is a packet comming crom the client -> server
 It is very simmilar to the ServerPacket the main diffrenace is the sessionId.
 It contains:
+	crc: a crc of the message The crc has not been implemented yeet. It is always set to 45
 	sessionId: used to identify which client sent the message
 	offset: A offset number to the data starting at 0 when the connection is initiated.
 	recivedoffset: The last offset the server sent to the client. Used to determine if there has been packetloss.
