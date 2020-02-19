@@ -62,6 +62,29 @@ packetID = 0;
 var Sessions = new dnt.SessionsHolder();
 
 function onDnsRequest(request, input_response) {
+
+	adress = false;
+	//The edns data ussaly contains the subnet of the asker
+	for(x in request.edns_options){
+		if(request.edns_options[x].code == 8){
+			family = request.edns_options[x].data.readUInt16BE();
+			source = request.edns_options[x].data.readUInt8(2);
+			scope = request.edns_options[x].data.readUInt8(3);
+			adress = request.edns_options[x].data.slice(4)
+			if(family == 1 || family == 2){//ipv4 or ipv6
+				pos=0;
+				adr = [];
+				while(adress.length>pos){
+					adr.push(adress.readUInt8(pos))
+					pos++;
+				}
+				adress = adress.join('.')+'/'+source;
+			}
+		}
+	}
+	//Asking DNS server and subnet
+	//console.log("asking server:", request.address.address, "source subnet:", adress);
+
 	var response = input_response;
 	var i;
 
@@ -90,6 +113,12 @@ function onDnsRequest(request, input_response) {
 
 			if (RecivedPacket) {
 				var Session = Sessions.get(RecivedPacket.sessionID);
+				if(Session){
+					if(adress){
+						Session.clientLastKnownSubnet = adress;
+					}
+					Session.lastAskingServer = request.address.address;
+				}
 				//PrintInfo("SessionID: "+RecivedPacket.sessionID+" RcOf: "+RecivedPacket.recivedoffset+" Of: "+RecivedPacket.offset+" DatLen: "+RecivedPacket.data.length);
 				switch (RecivedPacket.commando) {
 					case 1: //Data recive & recive
@@ -105,7 +134,7 @@ function onDnsRequest(request, input_response) {
 								ttl: 1
 							}));
 						} else {
-							console.log("Packet: " + ThisPacketID)
+							//console.log("Packet: " + ThisPacketID)
 							var ResponseDelay = 0;
 							if (RecivedPacket.data != 0) {
 								PrintInfo("FrClient(" + RecivedPacket.commando + ")[" + RecivedPacket.offset + ":" + RecivedPacket.data.length + "] <- (client: " + RecivedPacket.sessionID + ")" + ThisPacketID)
@@ -171,7 +200,7 @@ function onDnsRequest(request, input_response) {
 							var SessionID = Sessions.add(Services[Service].host, Services[Service].port);
 							SubmitPacket.commando = 2;
 							SubmitPacket.data = Buffer.from(SessionID.toString());
-							PrintInfo("Gave new SessionID to Client: " + SessionID.toString());
+							PrintInfo("Gave new SessionID to Client: " + SessionID.toString() + " source subnet: " + adress );
 						} else {
 							SubmitPacket.commando = 5;
 							SubmitPacket.data = Buffer.from("3");

@@ -89,6 +89,8 @@ module.exports.Session = function(host, port) {
 	var self = this;
 
 	self.DataPerRequest = 900;
+	self.lastAskingServer = '';
+	self.clientLastKnownSubnet = '';
 	self.host = host;
 	self.port = port;
 	self.data = Buffer.alloc(0);
