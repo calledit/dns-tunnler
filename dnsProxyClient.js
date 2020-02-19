@@ -13,8 +13,8 @@ var argDescr = {
 	'service': {
 		key: 's',
 		args: 1,
-		description: 'The service that we want to connect to.',
-		mandatory: true
+		default: 's',
+		description: 'The service that we want to connect to. Defaults to s indicating ssh.',
 	},
 	'resolver': {
 		key: 'r',
