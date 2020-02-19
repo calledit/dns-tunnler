@@ -35,7 +35,7 @@ example
 When you want to connect to your server you run:
 
 ```bash
-ssh -C -o ProxyCommand="node dnsProxyClient.js -p 53 -r 8.8.8.8 -d proxy.example.com -s s -t 700" user@example.com
+ssh -C -o ProxyCommand="node dnsProxyClient.js -d proxy.example.com" user@example.com
 ```
 
-Replace proxy.example.com with your own dns name and you can replace 8.8.8.8 with any dns server you can reach.
+Replace proxy.example.com with your own dns name. There are a few timing baed parameters that effect speed and latency reducing -t from the default 500 ms lowers the latency at the expense of more frequent requests.
