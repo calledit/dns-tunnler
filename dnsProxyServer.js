@@ -94,6 +94,18 @@ function decode_edns_options(edns_options){
 
 }
 
+function push_answer(response, BytesLeft, question_name, SubmitPacket){
+	var TxData = SubmitPacket.GetBinData();
+	response.answer.push(dns.TXT({
+		name: question_name,
+		data: TxData,
+		ttl: 1
+	}));
+	BytesLeft -= 13 + TxData.length
+
+	return BytesLeft;
+}
+
 function onPacketFromClient(RecivedPacket, edns_subnet, question_name, asking_server_address, response, BytesLeft){
 	var ret = {
 		ResonseDelayed: false,
@@ -116,11 +128,7 @@ function onPacketFromClient(RecivedPacket, edns_subnet, question_name, asking_se
 				var SubmitPacket = new dnt.ServerPacket();
 				SubmitPacket.commando = 5;
 				SubmitPacket.data = Buffer.from("1");
-				response.answer.push(dns.TXT({
-					name: question_name,
-					data: SubmitPacket.GetBinData(),
-					ttl: 1
-				}));
+				ret.BytesLeft = push_answer(response, ret.BytesLeft, question_name, SubmitPacket)
 			} else {
 				//console.log("Packet: " + ThisPacketID)
 				var ResponseDelay = 0;
@@ -151,30 +159,18 @@ function onPacketFromClient(RecivedPacket, edns_subnet, question_name, asking_se
 							if (Session.IsThereUnReadBytes()) {
 								SubmitPacket.commando = 4;
 							}
-							//console.error("Read bytes: ", Session.GetLastReadByte()," Client Recived: ", RecivedPacket.recivedoffset);
 							RequestedOffset += SubmitPacket.data.length;
 						}
 
 						if (SubmitPacket.data.length == 0) {
 							if (response.answer.length == 0) {
 								SubmitPacket.commando = 3;
-								response.answer.push(dns.TXT({
-									name: question_name,
-									data: SubmitPacket.GetBinData(),
-									ttl: 1
-								}));
+								ret.BytesLeft = push_answer(response, ret.BytesLeft, question_name, SubmitPacket)
 							}
 							break;
 						} else {
 							PrintInfo("ToClient(" + SubmitPacket.commando + ")[" + SubmitPacket.offset + ":" + SubmitPacket.data.length + "] -> (client: " + RecivedPacket.sessionID + ")" + ThisPacketID)
-							var TxData = SubmitPacket.GetBinData();
-							response.answer.push(dns.TXT({
-								name: question_name,
-								data: TxData,
-								ttl: 1
-							}));
-							//console.error("BytesLeft", BytesLeft ,"TxData", TxData.length)
-							ret.BytesLeft -= 13 + TxData.length;
+							ret.BytesLeft = push_answer(response, ret.BytesLeft, question_name, SubmitPacket)
 						}
 					}
 					response.send();
@@ -194,11 +190,7 @@ function onPacketFromClient(RecivedPacket, edns_subnet, question_name, asking_se
 				SubmitPacket.data = Buffer.from("3");
 				PrintInfo("Client asked for a unknown service: " + Services[Service]);
 			}
-			response.answer.push(dns.TXT({
-				name: question_name,
-				data: SubmitPacket.GetBinData(),
-				ttl: 1
-			}));
+			ret.BytesLeft = push_answer(response, ret.BytesLeft, question_name, SubmitPacket)
 			break;
 		case 5: //Error
 			PrintInfo("Client reported error: " + RecivedPacket.data.toString());
@@ -209,11 +201,7 @@ function onPacketFromClient(RecivedPacket, edns_subnet, question_name, asking_se
 			SubmitPacket.commando = 5;
 			SubmitPacket.data = Buffer.from("2");
 
-			response.answer.push(dns.TXT({
-				name: question_name,
-				data: SubmitPacket.GetBinData(),
-				ttl: 1
-			}));
+			ret.BytesLeft = push_answer(response, ret.BytesLeft, question_name, SubmitPacket)
 			break;
 	}
 	return ret;
