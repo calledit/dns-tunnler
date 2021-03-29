@@ -8,7 +8,7 @@ Install
 -------
 
 ```bash
-git clone https://github.com/callesg/dns-tunnler.git
+git clone https://github.com/calledit/dns-tunnler.git
 cd dns-tunnler
 npm install native-dns@0.4.1 stdio
 ```
