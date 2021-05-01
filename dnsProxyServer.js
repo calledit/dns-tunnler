@@ -10,6 +10,13 @@ var argDescr = {
 		description: 'The dns name of the dns server example: dns.example.com',
 		required: true
 	},
+	'datalogkey': {
+		key: 'k',
+		args: 1,
+		description: 'data loging key. Spcial dns address that can take small commands usefull for super low data speed systems like satelite data loging. default is l usage on client nslookup ${logdata}.logpwd.${dnsname}',
+		default: 'logpwd',
+		required: false
+	},
 	'listenip': {
 		key: 'l',
 		args: 1,
@@ -57,6 +64,8 @@ var Services = {
 		port: 22
 	}
 }
+
+var datalogkey = options['datalogkey'];
 
 //packetID just used for debuging
 packetID = 0;
@@ -226,7 +235,7 @@ function onDnsRequest(request, input_response) {
 
 	//If we get edns info populate it in the edns_subnet variable
 	var edns_subnet = decode_edns_options(request.edns_options);
-	
+
 	//Asking DNS server and subnet
 	//console.log("asking server:", request.address.address, "source subnet:", adress);
 
@@ -238,21 +247,30 @@ function onDnsRequest(request, input_response) {
 		//A question to one of the services that we support should look somthing
 		//like: base32NUMdata base32data.dnsproxy.example.com
 		var QuestionName = request.question[x].name;
-		
+
 		var ownDomain = QuestionName.substr(QuestionName.length - options.dnsname.length);
 		var dataSubdomain = QuestionName.substr(0, QuestionName.length - options.dnsname.length);
 
 		//Does the question end with our Special Domain Example: dnsproxy.example.com
 		if (ownDomain == options.dnsname) {
-			var RecivedPacket = new dnt.ClientPacket(dataSubdomain);
+			var parts = dataSubdomain.split('.');
 
-			//Was the message from the client decoded properly
-			if (RecivedPacket) {
-				ret = onPacketFromClient(RecivedPacket, edns_subnet, QuestionName, request.address.address, response, BytesLeft);
-				ResonseDelayed = ret.ResonseDelayed;
-				BytesLeft = ret.BytesLeft;
-			} else {
-				PrintInfo("The question does not have the correct number of heders");
+			if(parts.length > 1 && parts[parts.length-2] == datalogkey){
+				//this is special data, not tunneling data
+				parts.pop();//remove last empty entry
+				parts.pop();//remove the special indicator entry the datalogkey
+				DataLog(parts, edns_subnet, QuestionName, response)
+			}else{
+				var RecivedPacket = new dnt.ClientPacket(dataSubdomain);
+
+				//Was the message from the client decoded properly
+				if (RecivedPacket) {
+					ret = onPacketFromClient(RecivedPacket, edns_subnet, QuestionName, request.address.address, response, BytesLeft);
+					ResonseDelayed = ret.ResonseDelayed;
+					BytesLeft = ret.BytesLeft;
+				} else {
+					PrintInfo("The question does not have the correct number of heders");
+				}
 			}
 		} else {
 			PrintInfo("Question not for us:" + request.question[x].name);
@@ -262,6 +280,18 @@ function onDnsRequest(request, input_response) {
 		response.send();
 	}
 };
+
+
+function DataLog(data, edns_subnet, question_name, response){
+	PrintInfo("recived dataloging message from subnet: "+edns_subnet)
+	console.log(data)
+
+	response.answer.push(dns.TXT({
+			name: question_name,
+			data: "Log recived",
+			ttl: 1
+	}));
+}
 
 function PrintInfo(VerbTxT) {
 	if (options.verbose) {
