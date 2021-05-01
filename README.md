@@ -40,7 +40,7 @@ ssh -C -o ProxyCommand="node dnsProxyClient.js -d proxy.example.com" user@exampl
 Log data throgh dns from a client:
 ```bash
 nslookup ${logdata}.logpwd.proxy.example.com
-
+```
 
 
 
