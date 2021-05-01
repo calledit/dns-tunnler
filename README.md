@@ -10,7 +10,7 @@ Install
 ```bash
 git clone https://github.com/calledit/dns-tunnler.git
 cd dns-tunnler
-npm install native-dns@0.4.1 stdio
+npm install native-dns@0.4.1 stdio request
 ```
 
 Usage
@@ -22,7 +22,7 @@ and on the server run
 nodejs dnsProxyServer.js -d proxy.example.com -p 53 -v
 ```
 I recomend runing it on another port than 53 and redirecting with some
-iptables rules so that you dont have to run stuff as root.
+iptables rules so that you dont run the program as root.
 
 example
 ```iptables
@@ -32,10 +32,16 @@ example
 -A PREROUTING -p udp -d $EXTIP --dport 53 -m conntrack --ctstate NEW,ESTABLISHED,RELATED -j REDIRECT --to-port 5453
 ```
 
-When you want to connect to your server you run:
+To connect with ssh you can run:
 
 ```bash
 ssh -C -o ProxyCommand="node dnsProxyClient.js -d proxy.example.com" user@example.com
 ```
+Log data throgh dns from a client:
+```bash
+nslookup ${logdata}.logpwd.proxy.example.com
+
+
+
 
 Replace proxy.example.com with your own dns name. There are a few timing baed parameters that effect speed and latency reducing -t from the default 500 ms lowers the latency at the expense of more frequent requests.
