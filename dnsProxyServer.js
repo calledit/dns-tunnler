@@ -1,7 +1,8 @@
 var dns = require('native-dns'),
 	stdio = require('stdio'),
 	server = dns.createServer(),
-	dnt = require('./dnsProxyCommon.js');
+	dnt = require('./dnsProxyCommon.js'),
+	request = require('request');
 
 var argDescr = {
 	'dnsname': {
@@ -259,7 +260,7 @@ function onDnsRequest(request, input_response) {
 				//this is special data, not tunneling data
 				parts.pop();//remove last empty entry
 				parts.pop();//remove the special indicator entry the datalogkey
-				DataLog(parts, edns_subnet, QuestionName, response)
+				ResonseDelayed = DataLog(parts, edns_subnet, QuestionName, response)
 			}else{
 				var RecivedPacket = new dnt.ClientPacket(dataSubdomain);
 
@@ -286,11 +287,17 @@ function DataLog(data, edns_subnet, question_name, response){
 	PrintInfo("recived dataloging message from subnet: "+edns_subnet)
 	console.log(data)
 
-	response.answer.push(dns.TXT({
-			name: question_name,
-			data: "Log recived",
-			ttl: 1
-	}));
+	//register log in webserver
+	request('http://localhost/dnsdatalog/?'+data.join('.'), function (error, http_response, body) {
+		console.log('sending response:', body)
+		response.answer.push(dns.TXT({
+				name: question_name,
+				data: body,
+				ttl: 1
+		}));
+		response.send();
+	});
+	return true;
 }
 
 function PrintInfo(VerbTxT) {
